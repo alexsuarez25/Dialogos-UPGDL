@@ -82,8 +82,6 @@ export interface SubDef {
   items?: (string | { name: string })[];
 }
 
-export type CustomHijo = SubDef & { isCustom?: boolean };
-
 export interface CentralCopy {
   title: string;
   intro: string;

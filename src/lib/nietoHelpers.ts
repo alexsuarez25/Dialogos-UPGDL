@@ -1,12 +1,18 @@
+import {
+  customNietosForHijo,
+  type CustomNietosState,
+} from "./firebase/mapCustomNodesRealtime";
+
 export function isNietoNodeName(
   name: string,
-  cNietos: Record<string, { name: string }[]>
+  cNietos: CustomNietosState | Record<string, { name: string }[]>
 ): boolean {
   if (!name || !cNietos || typeof cNietos !== "object") return false;
-  for (const arr of Object.values(cNietos)) {
+  for (const pk of Object.keys(cNietos)) {
     if (
-      Array.isArray(arr) &&
-      arr.some((n) => n && String(n.name) === String(name))
+      customNietosForHijo(cNietos as CustomNietosState, pk).some(
+        (n) => n && String(n.name) === String(name)
+      )
     )
       return true;
   }
@@ -15,13 +21,14 @@ export function isNietoNodeName(
 
 export function getNietoParentKeyForName(
   name: string,
-  cNietos: Record<string, { name: string }[]>
+  cNietos: CustomNietosState | Record<string, { name: string }[]>
 ): string {
   if (!name || !cNietos || typeof cNietos !== "object") return "";
-  for (const [pk, arr] of Object.entries(cNietos)) {
+  for (const pk of Object.keys(cNietos)) {
     if (
-      Array.isArray(arr) &&
-      arr.some((n) => n && String(n.name) === String(name))
+      customNietosForHijo(cNietos as CustomNietosState, pk).some(
+        (n) => n && String(n.name) === String(name)
+      )
     )
       return pk;
   }

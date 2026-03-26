@@ -66,10 +66,12 @@ npm run preview
 - **`src/components/layout/App.tsx`** — thin shell; loads the main feature screen.
 - **`src/components/features/dialogos/`** — map UI (`Dashboard`, panels, popovers, etc.).
 - **`src/lib/`** — shared logic (`mapStatic`, search, geometry, …).
-- **`src/lib/firebase/`** — Firebase app init (`client.ts`) and Realtime Database helpers (`contactosRealtime`, `tagMapRealtime`, `notasNietoRealtime`).
+- **`src/lib/firebase/`** — Firebase app init (`client.ts`) and Realtime Database helpers (`contactosRealtime`, `tagMapRealtime`, `notasNietoRealtime`, `mapCustomNodesRealtime` for extra micro-nodes under existing catalog children, synced from **⚙ Nodos**).
 - **`src/types/`** — shared TypeScript types.
 
 Firebase **client** config is public by design (it ships in the bundle). Protect data with **Firebase Realtime Database rules** (and any other Firebase security) in the console.
+
+**Realtime paths used by this app:** `contactos`, `tag_map`, `notas_nietos`, **`map_app_state`** (notes, contacts snapshot, deleted node names, user-only tags, hidden main contacts — replaces former browser `window.storage` keys), and **`map_catalog`** (single root: built-in tree fields `main`, `projects`, `cinov_subs`, `aliados_subs`, `invest_subs`, plus **`custom_nietos`** for micro-nodes attached to an existing child, created in **⚙ Nodos**). The dashboard listens to the whole object; the first load runs **`ensureMapCatalogSeeded`**, which can merge legacy data from `map_catalog/built_in_v1` and `custom_map_nodes/*` into `map_catalog` if needed. Allow read/write on `map_catalog` and `map_app_state` for roles that should edit the map (or tighten as needed).
 
 ## Deploy (e.g. Netlify)
 

@@ -1,43 +1,30 @@
 import { useState } from "react";
-import {
-  MAIN,
-  PROJECTS,
-  CINOV_SUBS,
-  ALIADOS_SUBS,
-  INVEST_SUBS,
-} from "../../../lib/mapStatic";
+import type { MapTreeCatalogSlice } from "../../../lib/mapLayoutFromCatalog";
+import { customNietosForChildKey } from "../../../lib/firebase/mapCustomNodesRealtime";
 import { TAGS } from "../../../tagMapDefault.js";
 import { getTags } from "../../../lib/tagMapStore";
 import type { NoteRow } from "../../../types/nodes";
-
-type HijoLike = {
-  key: string;
-  name: string;
-  color?: string;
-  items?: unknown[];
-  listMode?: boolean;
-  short?: string;
-};
 
 export type MobileTreeProps = {
   hasContact: (name: string) => boolean;
   gc: (name: string) => string | null;
   getTagsForItem?: (name: string) => string[];
-  cHijos: Record<string, HijoLike[]>;
   cNietos: Record<string, Array<{ name: string; contact?: string }>>;
   deletedNodes: string[];
   notes: Record<string, NoteRow[]>;
+  treeCatalog: MapTreeCatalogSlice;
 };
 
 export function MobileTree({
   hasContact,
   gc,
   getTagsForItem,
-  cHijos,
   cNietos,
   deletedNodes,
   notes,
+  treeCatalog,
 }: MobileTreeProps) {
+  const { MAIN, PROJECTS, CINOV_SUBS, ALIADOS_SUBS, INVEST_SUBS } = treeCatalog;
   const [exp, setExp] = useState<Record<string, boolean>>({});
   const [selTag, setSelTag] = useState("");
   const [tagOpen, setTagOpen] = useState(false);
@@ -83,12 +70,12 @@ export function MobileTree({
                   : main.key === "investigacion"
                     ? INVEST_SUBS
                     : [];
-          [...subs, ...(cHijos[main.key] || [])].forEach((s) => {
+          subs.forEach((s) => {
             const its = [
               ...(s.items || []).map((i) =>
                 typeof i === "string" ? i : i
               ),
-              ...((cNietos[s.key] || []).map((n) => n.name)),
+              ...customNietosForChildKey(cNietos, s.key).map((n) => n.name),
             ].filter((n) => !(deletedNodes || []).includes(n));
             its.forEach((name) => {
               if (check(name))
@@ -535,14 +522,6 @@ export function MobileTree({
                   : m.key === "investigacion"
                     ? INVEST_SUBS
                     : [];
-          const ch = (cHijos[m.key] || []).map((h) => ({
-            ...h,
-            items: [
-              ...(h.items || []),
-              ...((cNietos[h.key] || []).map((n) => n.name)),
-            ],
-            isCustom: true,
-          }));
           return (
             <div
               key={m.key}
@@ -592,7 +571,7 @@ export function MobileTree({
                 </span>
               </div>
               {isO
-                ? [...bi, ...ch].map((s, si) => {
+                ? bi.map((s, si) => {
                     const sk = s.key;
                     const sN = (s.name || "").replace(/\n/g, " ");
                     const isS = !!exp["s_" + sk];
@@ -601,9 +580,8 @@ export function MobileTree({
                         ? i
                         : String((i as { name?: string }).name ?? i)
                     );
-                    const ci = !("isCustom" in s && s.isCustom) &&
-                      cNietos[sk]
-                      ? cNietos[sk].map((n) => n.name)
+                    const ci = sk
+                      ? customNietosForChildKey(cNietos, sk).map((n) => n.name)
                       : [];
                     const ai = [...ri, ...ci]
                       .filter(

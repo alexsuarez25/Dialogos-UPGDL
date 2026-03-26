@@ -15,11 +15,3 @@ interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
 
-interface DialogosStorage {
-  get: (key: string) => Promise<{ value: string } | null | undefined>;
-  set: (key: string, value: string) => Promise<void>;
-}
-
-interface Window {
-  storage: DialogosStorage;
-}

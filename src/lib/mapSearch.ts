@@ -1,7 +1,7 @@
 import { TAGS } from "../tagMapDefault.js";
-import { KEYWORDS, PROJECTS } from "./mapStatic";
-import { NODE_INDEX, findInIndex } from "./mapGeometry";
+import { KEYWORDS } from "./mapStatic";
 import type { NodeIndexEntry } from "../types/nodes";
+import type { CatalogProject } from "./mapLayoutFromCatalog";
 
 export interface SmartSearchResult {
   tags: string[];
@@ -10,7 +10,10 @@ export interface SmartSearchResult {
 
 export function smartSearch(
   query: string,
-  tagMap: Record<string, number[]>
+  tagMap: Record<string, number[]>,
+  projects: CatalogProject[],
+  nodeIndex: NodeIndexEntry[],
+  findInIndex: (name: string) => NodeIndexEntry[]
 ): SmartSearchResult {
   try {
     if (!query || query.length < 2) return { tags: [], nodes: [] };
@@ -33,7 +36,7 @@ export function smartSearch(
     });
     const matchedNodes: NodeIndexEntry[] = [];
     const seen = new Set<string>();
-    PROJECTS.forEach((p) => {
+    projects.forEach((p) => {
       const sn = p.short
         .toLowerCase()
         .normalize("NFD")
@@ -60,7 +63,7 @@ export function smartSearch(
         }
       }
     });
-    NODE_INDEX.forEach((n) => {
+    nodeIndex.forEach((n) => {
       const nn = n.name
         .toLowerCase()
         .normalize("NFD")

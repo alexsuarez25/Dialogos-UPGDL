@@ -1,8 +1,7 @@
-import { TAG_MAP_DEFAULT } from "../tagMapDefault.js";
 import { TAGS } from "../tagMapDefault.js";
 
-/** Live tag map; RTDB subscription mutates `.map` */
-export const tagMapLive = { map: { ...TAG_MAP_DEFAULT } as Record<string, number[]> };
+/** Live tag map; `Dashboard` syncs from `tag_map/entries` only */
+export const tagMapLive = { map: {} as Record<string, number[]> };
 
 export function getTags(name: string): string[] {
   const indices = tagMapLive.map[name];

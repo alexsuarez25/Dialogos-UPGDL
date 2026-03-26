@@ -1,5 +1,5 @@
 // @ts-nocheck — large legacy surface; feature modules are fully typed
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
   subscribeContactos,
   removeContactosLinkedToNode,
@@ -11,7 +11,22 @@ import {
 import ContactosFirebasePanel from "./ContactosFirebasePanel";
 import TagMapFirebasePanel from "./TagMapFirebasePanel";
 import { TAGS, TAG_MAP_DEFAULT } from "../../../tagMapDefault.js";
-import { subscribeTagMap, setTagMapEntry, deleteTagMapEntry } from "../../../lib/firebase/tagMapRealtime";
+import {
+  subscribeTagMap,
+  setTagMapEntry,
+  deleteTagMapEntry,
+  seedTagMapFromObject,
+} from "../../../lib/firebase/tagMapRealtime";
+import {
+  patchMapAppState,
+  subscribeMapAppState,
+} from "../../../lib/firebase/mapAppStateRealtime";
+import {
+  ensureMapCatalogSeeded,
+  subscribeMapCatalog,
+} from "../../../lib/firebase/mapCatalogRealtime";
+import { isValidMapCatalog } from "../../../lib/mapCatalogTypes";
+import { createMapLayoutFromCatalog } from "../../../lib/mapLayoutFromCatalog";
 import {
   appendNotaNieto,
   updateNotaNieto,
@@ -20,22 +35,18 @@ import {
   subscribeNotasNieto,
 } from "../../../lib/firebase/notasNietoRealtime";
 import {
-  LOGO,
-  C,
-  CENTRAL,
-  MAIN,
-  PROJECTS,
-  CINOV_SUBS,
-  ALIADOS_SUBS,
-  INVEST_SUBS,
-  CT,
-} from "../../../lib/mapStatic";
+  setCustomNietos,
+  normalizeCustomNietos,
+  customNietosForChildKey,
+} from "../../../lib/firebase/mapCustomNodesRealtime";
+import { LOGO, C, CENTRAL, CT } from "../../../lib/mapStatic";
 import { tagMapLive, getTags } from "../../../lib/tagMapStore";
 import { fbContactosRef, mergeItemPopContacts, resolveGc } from "../../../lib/contactHelpers";
 import { smartSearch } from "../../../lib/mapSearch";
 import {
-  mPos,
   pol,
+  fan,
+  RP,
   WW,
   HH,
   CX,
@@ -43,10 +54,6 @@ import {
   R1,
   R2,
   itemPos,
-  subPos,
-  projPos,
-  temaPos,
-  NODE_INDEX,
   camBB,
   camN,
   CAM_HOME,
@@ -55,6 +62,8 @@ import {
   NR2,
   NR3,
 } from "../../../lib/mapGeometry";
+import type { CatalogProject } from "../../../lib/mapLayoutFromCatalog";
+import type { CustomNietosState } from "../../../lib/firebase/mapCustomNodesRealtime";
 import { isNietoNodeName, getNietoParentKeyForName } from "../../../lib/nietoHelpers";
 import { useCamera } from "../../../hooks/useCamera";
 import { useIsMobile } from "../../../hooks/useIsMobile";
@@ -62,6 +71,72 @@ import { MapText } from "./MapText";
 import { CentralPanel } from "./CentralPanel";
 import { ItemPopover } from "./ItemPopover";
 import { MobileTree } from "./MobileTree";
+import { NodesAdminPanel } from "./NodesAdminPanel";
+
+function mergedTemaPositions(
+  proj: CatalogProject,
+  cNietos: CustomNietosState,
+  temaPos: (p: CatalogProject) => {
+    name: string;
+    x: number;
+    y: number;
+    angle: number;
+  }[],
+  projPos: () => Array<CatalogProject & { x: number; y: number; angle: number }>
+) {
+  const base = temaPos(proj);
+  const extraNames = customNietosForChildKey(cNietos, proj.key).map((r) => r.name);
+  const existing = new Set(proj.tematicas || []);
+  const toAdd = extraNames.filter((n) => !existing.has(n));
+  if (toAdd.length === 0) return base;
+  const pp = projPos().find((p) => p.key === proj.key);
+  if (!pp) return base;
+  const outA = (Math.atan2(pp.y - CY, pp.x - CX) * 180) / Math.PI;
+  const allNames = [...(proj.tematicas || []), ...toAdd];
+  const n = allNames.length;
+  const a = fan(n, outA, 34, 180);
+  return allNames.map((t, i) => {
+    const nm = t;
+    const [x, y] = pol(pp.x, pp.y, RP, a[i]);
+    return { name: nm, x, y, angle: a[i] };
+  });
+}
+
+function searchMetaForChildKey(
+  pk: string,
+  PROJECTS: CatalogProject[],
+  CINOV_SUBS: { key: string; name: string }[],
+  ALIADOS_SUBS: { key: string; name: string }[],
+  INVEST_SUBS: { key: string; name: string }[]
+):
+  | { branch: string; projKey?: string; subKey?: string; parent: string }
+  | null {
+  const proj = PROJECTS.find((p) => p.key === pk);
+  if (proj)
+    return { branch: "proyectos", projKey: pk, parent: proj.short };
+  const cin = CINOV_SUBS.find((s) => s.key === pk);
+  if (cin)
+    return {
+      branch: "cinov",
+      subKey: pk,
+      parent: cin.name.split("\n")[0],
+    };
+  const ali = ALIADOS_SUBS.find((s) => s.key === pk);
+  if (ali)
+    return {
+      branch: "aliados",
+      subKey: pk,
+      parent: ali.name.split("\n")[0],
+    };
+  const inv = INVEST_SUBS.find((s) => s.key === pk);
+  if (inv)
+    return {
+      branch: "investigacion",
+      subKey: pk,
+      parent: inv.name.split("\n")[0],
+    };
+  return null;
+}
 
 /* ═══ DASHBOARD ═══ */
 export default function Dashboard() {
@@ -70,27 +145,63 @@ export default function Dashboard() {
   const [sProj, setSProj] = useState(null); const [sTema, setSTema] = useState(null);
   const [sItem, setSItem] = useState(null); const [panel, setPanel] = useState(false);
   const [cPanel, setCPanel] = useState(false); const [notes, setNotes] = useState({}); const [contacts, setContacts] = useState({});
-  const [nt, setNt] = useState(''); const [hov, setHov] = useState(null); const [cHijos, setCHijos] = useState({}); const [cNietos, setCNietos] = useState({});
+  const [nt, setNt] = useState(''); const [hov, setHov] = useState(null); const [cNietos, setCNietos] = useState({});
   const [showAdmin, setShowAdmin] = useState(false); const [showContactosFb, setShowContactosFb] = useState(false); const [showTagMapFb, setShowTagMapFb] = useState(false);
-  const [tagMapUi, setTagMapUi] = useState(() => ({ ...TAG_MAP_DEFAULT })); const [tagMapRemoteEmpty, setTagMapRemoteEmpty] = useState(true);
+  const [tagMapUi, setTagMapUi] = useState(() => ({})); const [tagMapRemoteEmpty, setTagMapRemoteEmpty] = useState(true);
+  const tagMapSeedInFlight = useRef(false);
   const [fbContactos, setFbContactos] = useState([]);
-  const [adminStep, setAdminStep] = useState(1); const [adminPadre, setAdminPadre] = useState(''); const [adminLevel, setAdminLevel] = useState(''); const [adminHijo, setAdminHijo] = useState(''); const [adminForm, setAdminForm] = useState({ name: '', contact: '' }); const [delConfirm, setDelConfirm] = useState(null); const [userTags, setUserTags] = useState({}); const [hiddenCT, setHiddenCT] = useState([]); const [deletedNodes, setDeletedNodes] = useState([]); const [ms, setMs] = useState({ x: 0, y: 0 });
+  const [userTags, setUserTags] = useState({}); const [hiddenCT, setHiddenCT] = useState([]); const [deletedNodes, setDeletedNodes] = useState([]); const [ms, setMs] = useState({ x: 0, y: 0 });
+  const [mapCatalog, setMapCatalog] = useState(null);
   const svgR = useRef(null); const dr = useRef({ a: false, sx: 0, sy: 0, m: false });
   const { vb, flyTo, zoomAt, panBy } = useCamera(CAM_HOME);
+
+  const layout = useMemo(
+    () =>
+      mapCatalog != null && isValidMapCatalog(mapCatalog)
+        ? createMapLayoutFromCatalog(mapCatalog)
+        : null,
+    [mapCatalog]
+  );
 
   const gc = (n: string) => resolveGc(n, fbContactosRef.current, CT);
 
 
   useEffect(() => {
+    return subscribeMapAppState(
+      {
+        onNotes: (v) => setNotes(v),
+        onContacts: (v) => setContacts(v),
+        onDeletedNodes: (v) => setDeletedNodes(v),
+        onUserTags: (v) => setUserTags(v),
+        onHiddenMainContacts: (v) => setHiddenCT(v),
+      },
+      (e) => console.error("map_app_state RTDB:", e)
+    );
+  }, []);
+
+  useEffect(() => {
+    let unsub = () => {};
     (async () => {
-      try { const r = await window.storage.get('map-notes-v21'); if (r && r.value) setNotes(JSON.parse(r.value)); } catch (e) { }
-      try { const r2 = await window.storage.get('map-contacts-v1'); if (r2 && r2.value) setContacts(JSON.parse(r2.value)); } catch (e) { }
-      try { const r3 = await window.storage.get('map-cH'); if (r3 && r3.value) setCHijos(JSON.parse(r3.value)); } catch (e) { }
-      try { const r4 = await window.storage.get('map-cN'); if (r4 && r4.value) setCNietos(JSON.parse(r4.value)); } catch (e) { }
-      try { const r5 = await window.storage.get('map-del'); if (r5 && r5.value) setDeletedNodes(JSON.parse(r5.value)); } catch (e) { }
-      try { const r6 = await window.storage.get('map-utags'); if (r6 && r6.value) setUserTags(JSON.parse(r6.value)); } catch (e) { }
-      try { const r7 = await window.storage.get('map-hct'); if (r7 && r7.value) setHiddenCT(JSON.parse(r7.value)); } catch (e) { }
+      try {
+        await ensureMapCatalogSeeded();
+      } catch (e) {
+        console.error("map_catalog seed:", e);
+      }
+      unsub = subscribeMapCatalog((raw) => {
+        if (raw != null && isValidMapCatalog(raw)) {
+          setMapCatalog(raw);
+          setCNietos(normalizeCustomNietos(raw.custom_nietos));
+        } else {
+          setMapCatalog(null);
+          if (raw == null) {
+            setCNietos({});
+          } else {
+            setCNietos(normalizeCustomNietos(raw.custom_nietos));
+          }
+        }
+      }, (e) => console.error("map_catalog RTDB:", e));
     })();
+    return () => unsub();
   }, []);
 
   useEffect(() => {
@@ -120,8 +231,16 @@ export default function Dashboard() {
   useEffect(() => {
     return subscribeTagMap(
       (data, remoteHasRows) => {
+        if (!remoteHasRows && !tagMapSeedInFlight.current) {
+          tagMapSeedInFlight.current = true;
+          void seedTagMapFromObject(TAG_MAP_DEFAULT)
+            .catch((e) => console.error("tag_map seed:", e))
+            .finally(() => {
+              tagMapSeedInFlight.current = false;
+            });
+        }
+        const next = {};
         const hasUseful = data && typeof data === "object" && Object.keys(data).length > 0;
-        const next = { ...TAG_MAP_DEFAULT };
         if (hasUseful) {
           for (const [k, v] of Object.entries(data)) {
             if (Array.isArray(v)) next[k] = [...v];
@@ -154,7 +273,7 @@ export default function Dashboard() {
           const localOnly = local.filter((n) => !n?.fbId);
           const merged = [...dbRows, ...localOnly];
           const next = { ...prev, [nm]: merged };
-          try { window.storage.set("map-notes-v21", JSON.stringify(next)); } catch (e) { }
+          void patchMapAppState({ notes: next }).catch((e) => console.error(e));
           return next;
         });
       },
@@ -177,7 +296,7 @@ export default function Dashboard() {
     }
     const nx = { ...notes, [k]: [entry, ...existing] };
     setNotes(nx); setNt('');
-    try { await window.storage.set('map-notes-v21', JSON.stringify(nx)); } catch (e) { }
+    try { await patchMapAppState({ notes: nx }); } catch (e) { console.error(e); }
   }, [notes, cNietos]);
   const editNote = useCallback(async (k, idx, newText, parentKey = "") => {
     const existing = Array.isArray(notes[k]) ? [...notes[k]] : [];
@@ -194,7 +313,7 @@ export default function Dashboard() {
     }
     existing[idx] = { ...row, text: newText, edited };
     const nx = { ...notes, [k]: existing }; setNotes(nx);
-    try { await window.storage.set('map-notes-v21', JSON.stringify(nx)); } catch (e) { }
+    try { await patchMapAppState({ notes: nx }); } catch (e) { console.error(e); }
   }, [notes, cNietos]);
   const delNote = useCallback(async (k, idx, parentKey = "") => {
     const existing = Array.isArray(notes[k]) ? [...notes[k]] : [];
@@ -210,19 +329,26 @@ export default function Dashboard() {
     }
     const nx = { ...notes, [k]: existing };
     setNotes(nx);
-    try { await window.storage.set('map-notes-v21', JSON.stringify(nx)); } catch (e) { }
+    try { await patchMapAppState({ notes: nx }); } catch (e) { console.error(e); }
   }, [notes, cNietos]);
 
   const hideMainContact = useCallback(async (name) => {
     if (!name) return; const nx = [...hiddenCT, name]; setHiddenCT(nx);
-    try { await window.storage.set('map-hct', JSON.stringify(nx)); } catch (e) { }
+    try { await patchMapAppState({ hidden_main_contacts: nx }); } catch (e) { console.error(e); }
   }, [hiddenCT]);
   const restoreMainContact = useCallback(async (name) => {
     if (!name) return; const nx = hiddenCT.filter(n => n !== name); setHiddenCT(nx);
-    try { await window.storage.set('map-hct', JSON.stringify(nx)); } catch (e) { }
+    try { await patchMapAppState({ hidden_main_contacts: nx }); } catch (e) { console.error(e); }
   }, [hiddenCT]);
 
-  const saveUT = useCallback(async nx => { try { setUserTags(nx); await window.storage.set('map-utags', JSON.stringify(nx)); } catch (e) { } }, []);
+  const saveUT = useCallback(async (nx) => {
+    try {
+      setUserTags(nx);
+      await patchMapAppState({ user_tags: nx });
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
   const getAllTags = useCallback(nm => { if (!nm) return []; try { return [...new Set([...(getTags(nm) || []), ...(userTags[nm] || [])])]; } catch (e) { return []; } }, [userTags, tagMapUi]);
   const getTagsForItem = useCallback((nm) => {
     if (!nm) return [];
@@ -268,41 +394,49 @@ export default function Dashboard() {
     }
   }, [userTags, saveUT]);
 
-  const saveDel = useCallback(async (nx) => { try { setDeletedNodes(nx); await window.storage.set('map-del', JSON.stringify(nx)); } catch (e) { console.error(e); } }, []);
   const deleteBuiltIn = useCallback((name) => {
     if (!name) return;
-    const nx = [...deletedNodes, name]; saveDel(nx);
-    try { const ut3 = { ...userTags }; delete ut3[name]; saveUT(ut3); } catch (e) { }
-    /* Also clean notes & contacts */
-    try { const nn = { ...notes }; delete nn[name]; setNotes(nn); window.storage.set('map-notes-v21', JSON.stringify(nn)); } catch (e) { }
-    try { const nc = { ...contacts }; delete nc[name]; setContacts(nc); window.storage.set('map-contacts-v1', JSON.stringify(nc)); } catch (e) { }
+    const nxDel = [...deletedNodes, name];
+    const ut3 = { ...userTags }; delete ut3[name];
+    const nn = { ...notes }; delete nn[name];
+    const nc = { ...contacts }; delete nc[name];
+    setDeletedNodes(nxDel);
+    setUserTags(ut3);
+    setNotes(nn);
+    setContacts(nc);
+    void patchMapAppState({
+      deleted_nodes: nxDel,
+      user_tags: ut3,
+      notes: nn,
+      contacts: nc,
+    }).catch((e) => console.error(e));
     (async () => {
       try { await removeContactosLinkedToNode(name); } catch (e) { console.error("RTDB del nodo:", e); }
     })();
     setSItem(null);
-  }, [deletedNodes, saveDel, notes, contacts]);
+  }, [deletedNodes, userTags, notes, contacts]);
 
-  /* ─── CUSTOM NODES ─── */
-  const saveCH = useCallback(async (nx) => { try { setCHijos(nx); await window.storage.set('map-cH', JSON.stringify(nx)); } catch (e) { console.error(e); } }, []);
-  const saveCN = useCallback(async (nx) => { try { setCNietos(nx); await window.storage.set('map-cN', JSON.stringify(nx)); } catch (e) { console.error(e); } }, []);
-  const addHijo = useCallback((pk, nd) => {
-    if (!nd?.name?.trim()) return;
-    const nx = { ...cHijos }; if (!nx[pk]) nx[pk] = [];
-    const nm = nd.name.trim(); const ky = nm.toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 30) + '_c';
-    if (nx[pk].some(h => h.name === nm)) return;
-    nx[pk] = [...nx[pk], { key: ky, name: nm, color: nd.color || C.gold, items: [] }]; saveCH(nx);
-  }, [cHijos, saveCH]);
-  const delHijo = useCallback((pk, hk) => {
+  /* ─── CUSTOM MICRO-NODES (custom_nietos) ─── */
+  const saveCN = useCallback(async (nx) => {
+    const cleaned = normalizeCustomNietos(nx);
     try {
-      const nx = { ...cHijos }; if (!nx[pk]) return; nx[pk] = nx[pk].filter(h => h.key !== hk); saveCH(nx);
-      const nn = { ...cNietos }; delete nn[hk]; saveCN(nn);
-    } catch (e) { console.error(e); }
-  }, [cHijos, cNietos, saveCH, saveCN]);
+      setCNietos(cleaned);
+    } catch (e) {
+      console.error(e);
+    }
+    try {
+      await setCustomNietos(cleaned);
+    } catch (e) {
+      console.error("RTDB set custom nietos:", e);
+    }
+  }, []);
   const addNieto = useCallback((hk, nd) => {
     if (!nd?.name?.trim()) return;
-    const nx = { ...cNietos }; if (!nx[hk]) nx[hk] = [];
-    const nm = nd.name.trim(); if (nx[hk].some(n => n.name === nm)) return;
-    nx[hk] = [...nx[hk], { name: nm, contact: nd.contact || '' }]; saveCN(nx);
+    const base = normalizeCustomNietos(cNietos);
+    const nx = { ...base };
+    const cur = customNietosForChildKey(nx, hk);
+    const nm = nd.name.trim(); if (cur.some(n => n.name === nm)) return;
+    nx[hk] = [...cur, { name: nm, contact: nd.contact || '' }]; saveCN(nx);
     const ct = (nd.contact || "").trim();
     if (ct) {
       (async () => {
@@ -312,7 +446,11 @@ export default function Dashboard() {
   }, [cNietos, saveCN]);
   const delNieto = useCallback((hk, nm) => {
     try {
-      const nx = { ...cNietos }; if (!nx[hk]) return; nx[hk] = nx[hk].filter(n => n.name !== nm); saveCN(nx);
+      const base = normalizeCustomNietos(cNietos);
+      const nx = { ...base };
+      const cur = customNietosForChildKey(nx, hk);
+      if (cur.length === 0) return;
+      nx[hk] = cur.filter(n => n.name !== nm); saveCN(nx);
       (async () => {
         try { await removeContactosLinkedToNode(nm); } catch (e) { console.error("RTDB del nieto contacto:", e); }
       })();
@@ -321,10 +459,12 @@ export default function Dashboard() {
 
   const goHome = useCallback(() => { setSM(null); setSSub(null); setSProj(null); setSTema(null); setSItem(null); setPanel(false); setCPanel(false); flyTo(CAM_HOME, 800); }, [flyTo]);
   const goMain = useCallback(m => {
+    if (!layout) return;
+    const { mPos, projPos, subPos, CINOV_SUBS, ALIADOS_SUBS, INVEST_SUBS } = layout;
     setSM(m); setSSub(null); setSProj(null); setSTema(null); setSItem(null); setPanel(false); setCPanel(false);
     const o = mPos[m.key]; const ch = m.key === "proyectos" ? projPos() : (m.key === "cinov" ? [...subPos("cinov", CINOV_SUBS)] : (m.key === "aliados" ? [...subPos("aliados", ALIADOS_SUBS)] : (m.key === "investigacion" ? [...subPos("investigacion", INVEST_SUBS)] : [])));
     flyTo(camBB([{ x: o.x, y: o.y }, ...ch], 300), 900);
-  }, [flyTo]);
+  }, [flyTo, layout]);
   const goSub = useCallback(s => {
     setSSub(s); setSProj(null); setSTema(null); setSItem(null);
     if (s.listMode) {
@@ -333,17 +473,26 @@ export default function Dashboard() {
       flyTo(camBB([s], 200), 850);
     } else {
       setPanel(false);
-      const its = itemPos(s, s.items || [], gc); flyTo(camBB([s, ...its], 340), 850);
+      const merged = [...(s.items || []), ...customNietosForChildKey(cNietos, s.key).map((n) => n.name)];
+      const its = itemPos(s, merged, gc); flyTo(camBB([s, ...its], 340), 850);
     }
-  }, [flyTo]);
+  }, [flyTo, gc, cNietos]);
   const goProj = useCallback(p => {
+    if (!layout) return;
+    const { projPos, temaPos } = layout;
     setSProj(p); setSSub(null); setSTema(null); setSItem(null); setPanel(true);
-    const pp = projPos().find(pr => pr.key === p.key); const ts = temaPos(p); flyTo(camBB([pp, ...ts], 280), 900);
-  }, [flyTo]);
+    const pp = projPos().find(pr => pr.key === p.key);
+    const ts = mergedTemaPositions(p, cNietos, temaPos, projPos);
+    flyTo(camBB([pp, ...ts], 280), 900);
+  }, [flyTo, layout, cNietos]);
   const goTema = useCallback(t => { setSTema(t); setSItem(null); setPanel(false); flyTo(camN(t.x, t.y), 800); }, [flyTo]);
   const saveContacts = useCallback(async (nx) => {
     setContacts(nx);
-    try { await window.storage.set('map-contacts-v1', JSON.stringify(nx)); } catch (e) { }
+    try {
+      await patchMapAppState({ contacts: nx });
+    } catch (e) {
+      console.error(e);
+    }
   }, []);
   const addContact = useCallback(async (key, c) => {
     const name = String(c.name || "").trim();
@@ -450,12 +599,21 @@ export default function Dashboard() {
   const goBack = useCallback(() => {
     try {
       if (sItem) { setSItem(null); return; }
-      if (sTema) { setSTema(null); if (sProj) { setPanel(true); const pp = projPos().find(p => p.key === sProj.key); flyTo(camBB([pp, ...temaPos(sProj)], 280), 750); } return; }
+      if (sTema) {
+        setSTema(null);
+        if (sProj && layout) {
+          const { projPos, temaPos } = layout;
+          setPanel(true);
+          const pp = projPos().find(p => p.key === sProj.key);
+          flyTo(camBB([pp, ...mergedTemaPositions(sProj, cNietos, temaPos, projPos)], 280), 750);
+        }
+        return;
+      }
       if (sProj) { setSProj(null); setPanel(false); if (sM) goMain(sM); return; }
       if (sSub) { setSSub(null); if (sM) goMain(sM); return; }
       if (sM) { goHome(); return; }
     } catch (e) { console.error(e); goHome(); }
-  }, [sItem, sTema, sProj, sSub, sM, flyTo, goHome, goMain]);
+  }, [sItem, sTema, sProj, sSub, sM, flyTo, goHome, goMain, layout, cNietos]);
   const cBg = useCallback(() => { if (sItem) { setSItem(null); return; } if (cPanel) { setCPanel(false); return; } goBack(); }, [sItem, cPanel, goBack]);
 
   const onW = useCallback(e => { e.preventDefault(); if (svgR.current) zoomAt(e.clientX, e.clientY, svgR.current, e.deltaY > 0 ? 1.15 : 0.87); }, [zoomAt]);
@@ -464,29 +622,45 @@ export default function Dashboard() {
   const onU = useCallback(() => { dr.current.a = false; }, []);
   useEffect(() => { const el = svgR.current; if (!el) return; el.addEventListener('wheel', onW, { passive: false }); return () => el.removeEventListener('wheel', onW); }, [onW]);
 
+  if (!layout) {
+    return (
+      <div style={{ fontFamily: "'Source Sans 3','Segoe UI',sans-serif", background: C.bg, width: "100%", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: C.textDk, fontSize: 16 }}>
+        Cargando mapa…
+      </div>
+    );
+  }
+
+  const { MAIN, PROJECTS, CINOV_SUBS, ALIADOS_SUBS, INVEST_SUBS, mPos, projPos, subPos, temaPos, NODE_INDEX, findInIndex } = layout;
+
   const pN = sM?.key === "proyectos" ? projPos() : [];
-  const cS_base = sM?.key === "cinov" ? subPos("cinov", CINOV_SUBS) : [];
-  const cS_custom = (sM?.key === "cinov" && cHijos.cinov || []).map((h, i) => { try { const a = (MAIN[1]?.angle || 0) + (i + 1) * 36 + CINOV_SUBS.length * 34; const [x, y] = pol(mPos.cinov?.x || CX, mPos.cinov?.y || CY, R2, a); return { ...h, x, y, angle: a, items: [...(h.items || []), ...((cNietos[h.key] || []).map(n => n.name))].filter(n => !deletedNodes.includes(n)), isCustom: true }; } catch (e) { return null; } }).filter(Boolean);
-  const cS = [...cS_base, ...cS_custom];
-  const aS_base = sM?.key === "aliados" ? subPos("aliados", ALIADOS_SUBS) : [];
-  const aS_custom = (sM?.key === "aliados" && cHijos.aliados || []).map((h, i) => { try { const a = (MAIN[2]?.angle || 90) + (i + 1) * 36 + ALIADOS_SUBS.length * 20; const [x, y] = pol(mPos.aliados?.x || CX, mPos.aliados?.y || CY, R2, a); return { ...h, x, y, angle: a, items: [...(h.items || []), ...((cNietos[h.key] || []).map(n => n.name))].filter(n => !deletedNodes.includes(n)), isCustom: true }; } catch (e) { return null; } }).filter(Boolean);
-  const aS = [...aS_base, ...aS_custom];
-  const iSub_base = sM?.key === "investigacion" ? subPos("investigacion", INVEST_SUBS) : [];
-  const iSub_custom = (sM?.key === "investigacion" && cHijos.investigacion || []).map((h, i) => { try { const a = (MAIN[3]?.angle || 180) + (i + 1) * 36 + INVEST_SUBS.length * 34; const [x, y] = pol(mPos.investigacion?.x || CX, mPos.investigacion?.y || CY, R2, a); return { ...h, x, y, angle: a, items: [...(h.items || []), ...((cNietos[h.key] || []).map(n => n.name))].filter(n => !deletedNodes.includes(n)), isCustom: true }; } catch (e) { return null; } }).filter(Boolean);
-  const iSub = [...iSub_base, ...iSub_custom];
+  const cS = sM?.key === "cinov" ? subPos("cinov", CINOV_SUBS) : [];
+  const aS = sM?.key === "aliados" ? subPos("aliados", ALIADOS_SUBS) : [];
+  const iSub = sM?.key === "investigacion" ? subPos("investigacion", INVEST_SUBS) : [];
   const allS = [...cS, ...aS, ...iSub];
   const _baseIt = (sSub?.items && !sSub.listMode) ? sSub.items : [];
-  const _custIt = (!sSub?.isCustom && sSub && cNietos[sSub.key]) ? (cNietos[sSub.key]).map(n => n.name) : [];
+  const _custIt = sSub ? customNietosForChildKey(cNietos, sSub.key).map(n => n.name) : [];
   const _allIt = [..._baseIt, ..._custIt].filter(n => !deletedNodes.includes(typeof n === 'string' ? n : n));
   const sItems = (sSub && !sSub.listMode && _allIt.length > 0) ? itemPos(sSub, _allIt, gc) : [];
-  const tN = sProj ? temaPos(sProj) : [];
+  const tN = sProj ? mergedTemaPositions(sProj, cNietos, temaPos, projPos) : [];
   const vS = vb.map(v => Math.round(v)).join(" ");
 
   /* Visibility: hide unrelated */
   const vis = m => !sM || sM.key === m.key;
 
 
-  if (isMob) return <MobileTree hasContact={hasContact} gc={gc} getTagsForItem={getTagsForItem} cHijos={cHijos} cNietos={cNietos} deletedNodes={deletedNodes} notes={notes} />
+  if (isMob) {
+    return (
+      <MobileTree
+        hasContact={hasContact}
+        gc={gc}
+        getTagsForItem={getTagsForItem}
+        cNietos={cNietos}
+        deletedNodes={deletedNodes}
+        notes={notes}
+        treeCatalog={{ MAIN, PROJECTS, CINOV_SUBS, ALIADOS_SUBS, INVEST_SUBS }}
+      />
+    );
+  }
 
   return (
     <div style={{ fontFamily: "'Source Sans 3','Segoe UI',sans-serif", background: C.bg, width: "100%", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", WebkitFontSmoothing: "antialiased" }}>
@@ -563,87 +737,20 @@ export default function Dashboard() {
             palette={C}
           />
         )}
-        {showAdmin && (<div onClick={e => e.stopPropagation()} style={{ position: "absolute", top: 14, left: "50%", transform: "translateX(-50%)", zIndex: 30, width: 480, maxHeight: "82vh", background: C.white, border: `1px solid ${C.gold}30`, borderRadius: 16, boxShadow: "0 10px 40px rgba(0,0,0,0.12)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ padding: "16px 22px 12px", borderBottom: `1px solid ${C.gold}15`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 16, fontWeight: 900, color: C.textDk, fontFamily: "'Cormorant Garamond',serif" }}>Administrar nodos</span>
-            <button type="button" onClick={() => { setShowAdmin(false); setAdminStep(1); }} style={{ background: "transparent", border: `1px solid ${C.gold}30`, borderRadius: 8, width: 28, height: 28, fontSize: 13, cursor: "pointer", color: C.textLt }}>✕</button></div>
-          <div style={{ flex: 1, overflowY: "auto", padding: "14px 22px" }}>
-            {/* Step 1: Padre */}
-            <div style={{ fontSize: 11, fontWeight: 800, color: C.gold, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 8 }}>1. Padre</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-              {MAIN.map(m => (<button type="button" key={m.key} onClick={() => { setAdminPadre(m.key); setAdminStep(2); setAdminLevel(''); setAdminHijo(''); }}
-                style={{ padding: "7px 16px", fontSize: 12, fontWeight: 700, borderRadius: 8, cursor: "pointer", border: adminPadre === m.key ? `2px solid ${m.color}` : `1px solid ${C.gold}30`, background: adminPadre === m.key ? m.color : C.white, color: adminPadre === m.key ? C.white : m.color }}>{m.name.split("\n")[0]}</button>))}
-            </div>
-            {/* Step 2: Level */}
-            {adminPadre && (<div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: C.gold, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 8 }}>2. Nivel</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button type="button" onClick={() => { setAdminLevel('hijo'); setAdminStep(3); }} style={{ flex: 1, padding: "10px", borderRadius: 8, cursor: "pointer", border: adminLevel === 'hijo' ? `2px solid ${C.gold}` : `1px solid ${C.gold}30`, background: adminLevel === 'hijo' ? C.gold + "15" : C.white, fontSize: 13, fontWeight: 700, color: C.textDk }}>Hijo (subcategoría)</button>
-                <button type="button" onClick={() => { setAdminLevel('nieto'); setAdminStep(3); }} style={{ flex: 1, padding: "10px", borderRadius: 8, cursor: "pointer", border: adminLevel === 'nieto' ? `2px solid ${C.gold}` : `1px solid ${C.gold}30`, background: adminLevel === 'nieto' ? C.gold + "15" : C.white, fontSize: 13, fontWeight: 700, color: C.textDk }}>Nieto (micro nodo)</button>
-              </div>
-            </div>)}
-            {/* Step 3: hijo selector (for nieto) + form */}
-            {adminLevel === 'nieto' && adminStep >= 3 && (<div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: C.gold, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 6 }}>3. Hijo padre</div>
-              <select value={adminHijo} onChange={e => setAdminHijo(e.target.value)} style={{ width: "100%", padding: "8px", fontSize: 12, border: `1px solid ${C.gold}30`, borderRadius: 6, outline: "none", marginBottom: 6 }}>
-                <option value="">Seleccionar...</option>
-                {[...(adminPadre === "cinov" ? CINOV_SUBS : (adminPadre === "aliados" ? ALIADOS_SUBS : (adminPadre === "investigacion" ? INVEST_SUBS : PROJECTS.map(p => ({ key: p.key, name: p.short }))))), ...(cHijos[adminPadre] || [])].map(s => (<option key={s.key} value={s.key}>{(s.name || s.short || "").split("\n")[0]}</option>))}
-              </select>
-            </div>)}
-            {/* Form */}
-            {((adminLevel === 'hijo' && adminStep >= 3) || (adminLevel === 'nieto' && adminHijo)) && (<div style={{ background: C.gold + "06", border: `1px solid ${C.gold}20`, borderRadius: 10, padding: "14px", marginBottom: 14 }}>
-              <input value={adminForm.name} onChange={e => setAdminForm(p => ({ ...p, name: e.target.value }))} placeholder="Nombre *" style={{ width: "100%", padding: "8px 10px", fontSize: 13, border: `1px solid ${C.gold}30`, borderRadius: 6, outline: "none", marginBottom: 6, boxSizing: "border-box" }} />
-              {adminLevel === 'nieto' && <input value={adminForm.contact} onChange={e => setAdminForm(p => ({ ...p, contact: e.target.value }))} placeholder="Contacto (opcional)" style={{ width: "100%", padding: "8px 10px", fontSize: 13, border: `1px solid ${C.gold}30`, borderRadius: 6, outline: "none", marginBottom: 8, boxSizing: "border-box" }} />}
-              <button type="button" onClick={() => { try { if (!adminForm.name.trim()) return; if (adminLevel === 'hijo') { addHijo(adminPadre, { name: adminForm.name, color: MAIN.find(m => m.key === adminPadre)?.color || C.gold }); } else if (adminHijo) { addNieto(adminHijo, { name: adminForm.name, contact: adminForm.contact }); } setAdminForm({ name: '', contact: '' }); } catch (e) { console.error(e); } }}
-                style={{ padding: "8px 20px", fontSize: 12, fontWeight: 800, color: C.white, background: C.gold, border: "none", borderRadius: 8, cursor: "pointer", opacity: adminForm.name.trim() ? 1 : 0.4 }}>{adminLevel === 'hijo' ? '+ Subcategoría' : '+ Micro nodo'}</button>
-            </div>)}
-            {/* TREE VIEW */}
-            {adminPadre && (() => {
-              try {
-                const padre = MAIN.find(m => m.key === adminPadre); if (!padre) return null;
-                const builtIn = adminPadre === "proyectos" ? PROJECTS.map(p => ({ key: p.key, name: p.short, color: p.color, items: p.tematicas || [], bi: true }))
-                  : (adminPadre === "cinov" ? CINOV_SUBS : (adminPadre === "aliados" ? ALIADOS_SUBS : INVEST_SUBS)).map(s => ({ ...s, bi: true }));
-                const custom = (cHijos[adminPadre] || []).map(h => ({ ...h, bi: false }));
-                const allH = [...builtIn, ...custom];
-                return (<div style={{ borderTop: `1px solid ${C.gold}15`, paddingTop: 14 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                    <div style={{ width: 14, height: 14, borderRadius: "50%", background: padre.color }} />
-                    <span style={{ fontSize: 14, fontWeight: 900, color: padre.color }}>{padre.name.split("\n")[0]}</span>
-                  </div>
-                  {allH.map((h, hi) => {
-                    const hItems = (h.items || []).map(it => typeof it === "string" ? it : it);
-                    const cItems = (cNietos[h.key] || []).map(n => n.name);
-                    const allN = [...hItems.filter(n => !deletedNodes.includes(n)).map(n => ({ name: n, bi: true, ct: gc(n) })), ...cItems.filter(n => !deletedNodes.includes(n)).map(n => ({ name: n, bi: false, ct: (cNietos[h.key] || []).find(cn => cn.name === n)?.contact || gc(n) || null }))];
-                    return (<div key={hi} style={{ marginLeft: 14, marginBottom: 8 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 0", borderBottom: `1px solid ${C.gold}08` }}>
-                        <div style={{ width: 2, height: 16, background: padre.color + "40" }} />
-                        <div style={{ width: 10, height: 10, borderRadius: "50%", background: h.color || padre.color, border: h.bi ? "none" : `2px dashed ${C.gold}` }} />
-                        <span style={{ fontSize: 12, fontWeight: 700, color: C.textDk, flex: 1 }}>{(h.name || "").split("\n")[0]}</span>
-                        <span style={{ fontSize: 8, color: h.bi ? C.textLt : C.gold, fontWeight: 700 }}>{h.bi ? "" : "✦"}</span>
-                        {h.listMode && <span style={{ fontSize: 8, color: C.textLt }}>📋</span>}
-                        {!h.bi && (delConfirm === h.key ? (<span style={{ display: "flex", gap: 2 }}>
-                          <button type="button" onClick={e => { e.stopPropagation(); delHijo(adminPadre, h.key); setDelConfirm(null); }} style={{ background: C.pulseRed, border: "none", color: C.white, borderRadius: 4, padding: "2px 8px", fontSize: 9, fontWeight: 700, cursor: "pointer" }}>Sí</button>
-                          <button type="button" onClick={e => { e.stopPropagation(); setDelConfirm(null); }} style={{ background: "transparent", border: `1px solid ${C.gold}20`, color: C.textLt, borderRadius: 4, padding: "2px 8px", fontSize: 9, cursor: "pointer" }}>No</button>
-                        </span>) : (<button type="button" onClick={e => { e.stopPropagation(); setDelConfirm(h.key); }} style={{ background: "transparent", border: `1px solid ${C.pulseRed}20`, color: C.pulseRed, borderRadius: 4, padding: "2px 6px", fontSize: 9, fontWeight: 700, cursor: "pointer" }}>×</button>))}
-                      </div>
-                      {!h.listMode && allN.slice(0, 10).map((n, ni) => (<div key={ni} style={{ display: "flex", alignItems: "center", gap: 5, padding: "2px 0", marginLeft: 22 }}>
-                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: (n.ct || hasContact(n.name)) ? C.green : C.pulseRed, border: n.bi ? "none" : "1.5px dashed " + C.gold }} />
-                        <span style={{ fontSize: 10, color: C.textMd, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.name}</span>
-                        {!n.bi && (delConfirm === `n_${h.key}_${n.name}` ? (<span style={{ display: "flex", gap: 2 }}>
-                          <button type="button" onClick={e => { e.stopPropagation(); delNieto(h.key, n.name); setDelConfirm(null); }} style={{ background: C.pulseRed, border: "none", color: C.white, borderRadius: 3, padding: "1px 6px", fontSize: 8, fontWeight: 700, cursor: "pointer" }}>Sí</button>
-                          <button type="button" onClick={e => { e.stopPropagation(); setDelConfirm(null); }} style={{ background: "transparent", border: `1px solid ${C.gold}15`, color: C.textLt, borderRadius: 3, padding: "1px 6px", fontSize: 8, cursor: "pointer" }}>No</button>
-                        </span>) : (<button type="button" onClick={e => { e.stopPropagation(); setDelConfirm(`n_${h.key}_${n.name}`); }} style={{ background: "transparent", border: `1px solid ${C.pulseRed}15`, color: C.pulseRed, borderRadius: 3, padding: "1px 5px", fontSize: 8, fontWeight: 700, cursor: "pointer" }}>×</button>))}
-                      </div>))}
-                      {!h.listMode && allN.length > 10 && <div style={{ fontSize: 9, color: C.textLt, marginLeft: 22, fontStyle: "italic" }}>+{allN.length - 10} más</div>}
-                      {h.listMode && <div style={{ fontSize: 9, color: C.textLt, marginLeft: 22 }}>📋 {hItems.length + cItems.length} elementos</div>}
-                    </div>);
-                  })}
-                  <div style={{ fontSize: 9, color: C.textLt, marginTop: 8 }}>{allH.length} subcategorías · ✦ personalizado</div>
-                </div>);
-              } catch (e) { console.error(e); return null; }
-            })()}
-          </div>
-        </div>)}
+        {showAdmin && (
+          <NodesAdminPanel
+            open={showAdmin}
+            onClose={() => setShowAdmin(false)}
+            palette={C}
+            treeCatalog={{ MAIN, PROJECTS, CINOV_SUBS, ALIADOS_SUBS, INVEST_SUBS }}
+            cNietos={cNietos}
+            deletedNodes={deletedNodes}
+            addNieto={addNieto}
+            delNieto={delNieto}
+            gc={gc}
+            hasContact={hasContact}
+          />
+        )}
 
         {/* BACK */}
         {/* Volver button moved to stacked search area */}
@@ -742,21 +849,31 @@ export default function Dashboard() {
               /* Get results based on mode */
               let resultNodes = []; let relatedTags = [];
               if (searchText.length >= 2) {
-                const sr = smartSearch(searchText, tagMapLive.map);
+                const sr = smartSearch(searchText, tagMapLive.map, PROJECTS, NODE_INDEX, findInIndex);
                 resultNodes = sr.nodes || []; relatedTags = sr.tags || [];
                 /* Add custom nodes search (state is available here) */
                 const q = searchText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                 const seen = new Set(resultNodes.map(n => n.name));
-                Object.entries(cHijos || {}).forEach(([pk, hs]) => {
-                  (hs || []).forEach(h => {
-                    const hn = (h.name || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                    if (hn.includes(q)) { if (!seen.has(h.name)) { seen.add(h.name); resultNodes.push({ name: h.name, type: "Personalizado", parent: pk, branch: "custom", matchType: "direct" }); } }
-                  });
-                });
-                Object.entries(cNietos || {}).forEach(([pk, ns]) => {
-                  (ns || []).forEach(n => {
+                Object.keys(cNietos || {}).forEach((pk) => {
+                  customNietosForChildKey(cNietos, pk).forEach(n => {
                     const nn = (n.name || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                    if (nn.includes(q)) { if (!seen.has(n.name)) { seen.add(n.name); resultNodes.push({ name: n.name, type: "Personalizado", parent: pk, branch: "custom", matchType: "direct" }); } }
+                    if (nn.includes(q) && !seen.has(n.name)) {
+                      seen.add(n.name);
+                      const meta = searchMetaForChildKey(pk, PROJECTS, CINOV_SUBS, ALIADOS_SUBS, INVEST_SUBS);
+                      if (meta) {
+                        resultNodes.push({
+                          name: n.name,
+                          type: "Personalizado",
+                          parent: meta.parent,
+                          branch: meta.branch,
+                          projKey: meta.projKey,
+                          subKey: meta.subKey,
+                          matchType: "direct",
+                        });
+                      } else {
+                        resultNodes.push({ name: n.name, type: "Personalizado", parent: pk, branch: "custom", matchType: "direct" });
+                      }
+                    }
                   });
                 });
               } else if (searchTag) {
@@ -780,28 +897,30 @@ export default function Dashboard() {
                   });
                 });
                 /* 3. Scan custom nietos */
-                Object.entries(cNietos || {}).forEach(([pk, ns]) => {
-                  (ns || []).forEach(n => {
+                Object.keys(cNietos || {}).forEach((pk) => {
+                  customNietosForChildKey(cNietos, pk).forEach(n => {
                     if (!n.name || deletedNodes.includes(n.name) || seen.has(n.name)) return;
                     const at = getTagsForItem(n.name);
                     if (at.includes(searchTag)) {
                       seen.add(n.name);
-                      resultNodes.push({ name: n.name, type: "Personalizado", parent: pk, branch: "custom", matchType: "tag" });
+                      const meta = searchMetaForChildKey(pk, PROJECTS, CINOV_SUBS, ALIADOS_SUBS, INVEST_SUBS);
+                      if (meta) {
+                        resultNodes.push({
+                          name: n.name,
+                          type: "Personalizado",
+                          parent: meta.parent,
+                          branch: meta.branch,
+                          projKey: meta.projKey,
+                          subKey: meta.subKey,
+                          matchType: "tag",
+                        });
+                      } else {
+                        resultNodes.push({ name: n.name, type: "Personalizado", parent: pk, branch: "custom", matchType: "tag" });
+                      }
                     }
                   });
                 });
-                /* 4. Scan custom hijos */
-                Object.entries(cHijos || {}).forEach(([pk, hs]) => {
-                  (hs || []).forEach(h => {
-                    if (!h.name || deletedNodes.includes(h.name) || seen.has(h.name)) return;
-                    const at = getAllTags(h.name);
-                    if (at.includes(searchTag)) {
-                      seen.add(h.name);
-                      resultNodes.push({ name: h.name, type: "Personalizado", parent: pk, branch: "custom", matchType: "tag" });
-                    }
-                  });
-                });
-                /* 5. Catch any node with userTags that wasn't scanned above */
+                /* 4. Catch any node with userTags that wasn't scanned above */
                 Object.entries(userTags || {}).forEach(([name, tags]) => {
                   if (!name || deletedNodes.includes(name) || seen.has(name)) return;
                   if (Array.isArray(tags) && tags.includes(searchTag)) {
@@ -830,13 +949,45 @@ export default function Dashboard() {
                       const d1 = (!sM || sM.key !== e0.branch) ? 500 : 0;
                       setTimeout(() => {
                         goSub(swp);
-                        const its = itemPos(swp, targetSub.items || [], gc); const ti = its.find(it => it.name === name);
-                        if (ti) setTimeout(() => { flyTo(camN(ti.x, ti.y), 800); openItem({ ...ti, _parentKey: e0.subKey || null, _isCustom: false }); }, 500);
+                        const rawItems = targetSub.items || [];
+                        const extra = customNietosForChildKey(cNietos, e0.subKey).map(r => r.name);
+                        const mergedItems = [...rawItems, ...extra];
+                        const its = itemPos(swp, mergedItems, gc);
+                        const ti = its.find(it => it.name === name);
+                        if (ti) {
+                          setTimeout(() => {
+                            flyTo(camN(ti.x, ti.y), 800);
+                            openItem({
+                              ...ti,
+                              _parentKey: e0.subKey || null,
+                              _isCustom: customNietosForChildKey(cNietos, e0.subKey).some(n => n.name === name),
+                            });
+                          }, 500);
+                        }
                       }, d1);
                     }
                   } else if (e0.branch === "proyectos" && e0.projKey) {
                     const proj = PROJECTS.find(p => p.key === e0.projKey);
-                    if (proj) { const d1 = (!sM || sM.key !== "proyectos") ? 500 : 0; setTimeout(() => goProj(proj), d1); }
+                    if (proj) {
+                      const d1 = (!sM || sM.key !== "proyectos") ? 500 : 0;
+                      setTimeout(() => {
+                        goProj(proj);
+                        const temas = mergedTemaPositions(proj, cNietos, temaPos, projPos);
+                        const t = temas.find((te) => te.name === name);
+                        if (t) {
+                          setTimeout(() => {
+                            flyTo(camN(t.x, t.y), 800);
+                            openItem({
+                              name: t.name,
+                              x: t.x,
+                              y: t.y,
+                              _parentKey: proj.key,
+                              _isCustom: customNietosForChildKey(cNietos, proj.key).some((n) => n.name === name),
+                            });
+                          }, 500);
+                        }
+                      }, d1);
+                    }
                   }
                 } catch (e) { console.error("doZoom error:", e); }
               };
@@ -957,7 +1108,7 @@ export default function Dashboard() {
             {/* ITEMS (micro nodos) */}
             {sItems.map((it, i) => {
               const isH = hov === `it${i}`; const noC = !hasContact(it.name); const matchesSearch = searchTag && getTagsForItem(it.name).includes(searchTag);
-              return (<g key={`it${i}`} onClick={e => { e.stopPropagation(); dr.current.m = false; try { if (it && it.x != null && it.y != null) { openItem({ ...it, _parentKey: sSub?.key || null, _isCustom: !!(!sSub?.isCustom ? ((cNietos[sSub?.key] || []).some(n => n.name === it.name)) : true) }); flyTo(camN(it.x, it.y), 700); } } catch (er) { console.error(er); } }}
+              return (<g key={`it${i}`} onClick={e => { e.stopPropagation(); dr.current.m = false; try { if (it && it.x != null && it.y != null) { const sk = sSub?.key || ""; openItem({ ...it, _parentKey: sk || null, _isCustom: customNietosForChildKey(cNietos, sk).some(n => n.name === it.name) }); flyTo(camN(it.x, it.y), 700); } } catch (er) { console.error(er); } }}
                 onMouseEnter={() => setHov(`it${i}`)} onMouseLeave={() => setHov(null)} style={{ cursor: "pointer" }}>
                 {noC && <circle cx={it.x} cy={it.y} r={36} fill={C.pulseRed} opacity={0.5}
                   style={{ animation: "redPulse 2s ease-in-out infinite", transformOrigin: `${it.x}px ${it.y}px` }} />}
@@ -1083,12 +1234,13 @@ export default function Dashboard() {
               </div>
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
-              {[...(sSub.items || []), ...((!sSub.isCustom && cNietos[sSub.key]) ? cNietos[sSub.key].map(n => n.name) : [])].filter(it => !deletedNodes.includes(typeof it === 'string' ? it : it)).sort((a, b) => String(a).localeCompare(String(b), 'es')).map((item, i) => {
+              {[...(sSub.items || []), ...(sSub.key ? customNietosForChildKey(cNietos, sSub.key).map(n => n.name) : [])].filter(it => !deletedNodes.includes(typeof it === 'string' ? it : it)).sort((a, b) => String(a).localeCompare(String(b), 'es')).map((item, i) => {
                 const itemName = typeof item === "string" ? item : item.name;
+                const sk = sSub?.key || "";
                 const contact = gc(itemName) || (Array.isArray(contacts[itemName]) && contacts[itemName].length > 0 ? contacts[itemName].map(c => c.name).join(', ') : null);
                 const tags = getTagsForItem(itemName);
                 return (
-                  <div key={i} onClick={() => { openItem({ name: itemName, contact: contact, _parentKey: sSub?.key || null, _isCustom: !!((cNietos[sSub?.key] || []).some(n => n.name === itemName)) }); }}
+                  <div key={i} onClick={() => { openItem({ name: itemName, contact: contact, _parentKey: sSub?.key || null, _isCustom: customNietosForChildKey(cNietos, sk).some(n => n.name === itemName) }); }}
                     style={{
                       padding: "14px 24px", cursor: "pointer", borderBottom: `1px solid ${C.gold}08`,
                       transition: "background 0.15s"
@@ -1160,9 +1312,7 @@ export default function Dashboard() {
                 try { await removeAllNotasForNieto(sItem._parentKey, nm); } catch (e4) { console.error("RTDB notas nieto:", e4); }
               })();
             } else if (sItem._level === 'hijo' && sItem._mainKey) {
-              /* Delete a hijo (sub): add to deletedNodes + remove custom hijo if applicable */
               deleteBuiltIn(nm);
-              try { const ch2 = { ...cHijos }; if (ch2[sItem._mainKey]) { ch2[sItem._mainKey] = ch2[sItem._mainKey].filter(h => (h.name || '').replace(/\n/g, ' ') !== nm); saveCH(ch2); } } catch (e2) { }
               setSSub(null); setPanel(false);
             } else {
               deleteBuiltIn(nm);
