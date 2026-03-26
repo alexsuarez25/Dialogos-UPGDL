@@ -2,8 +2,8 @@ import { useState } from "react";
 import { TAGS } from "../../../tagMapDefault.js";
 import type { MapItem, NoteRow } from "../../../types/nodes";
 import type { LocalContactRow } from "../../../lib/contactHelpers";
-import type { Palette } from "../../../types/palette";
 import { RichEditor } from "./RichEditor";
+import { cn } from "../../../lib/cn";
 
 export function ItemPopover({
   item,
@@ -18,6 +18,7 @@ export function ItemPopover({
   onAddContact,
   onEditContact,
   onDelContact,
+  onSetPrimaryContact,
   onDeleteNode,
   itemTags,
   onAddTag,
@@ -25,7 +26,8 @@ export function ItemPopover({
   mainContactHidden,
   onHideMainContact,
   onRestoreMainContact,
-  palette,
+  /** Live label from `displayPrimaryContactLabel` (Firebase + local + static CT). */
+  resolvedMainContact,
 }: {
   item: MapItem;
   onClose: () => void;
@@ -36,12 +38,18 @@ export function ItemPopover({
   onDelete: (idx: number) => void;
   onEdit: (idx: number, txt: string) => void;
   userContacts?: LocalContactRow[];
-  onAddContact: (c: { name: string; cargo?: string; email?: string }) => void;
+  onAddContact: (c: {
+    name: string;
+    cargo?: string;
+    email?: string;
+    isPrimary?: boolean;
+  }) => void;
   onEditContact: (
     idx: number,
-    c: { name: string; cargo?: string; email?: string }
+    c: { name: string; cargo?: string; email?: string; isPrimary?: boolean }
   ) => void;
   onDelContact: (idx: number) => void;
+  onSetPrimaryContact?: (idx: number) => void;
   onDeleteNode?: (() => void) | null;
   itemTags?: string[];
   onAddTag?: (nodeName: string, tag: string) => void;
@@ -49,14 +57,17 @@ export function ItemPopover({
   mainContactHidden?: boolean;
   onHideMainContact?: (name: string) => void;
   onRestoreMainContact?: (name: string) => void;
-  palette: Palette;
+  resolvedMainContact?: string | null;
 }) {
-  const C = palette;
-  const g = C.gold;
   const [confirmDel, setConfirmDel] = useState(false);
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [showAddC, setShowAddC] = useState(false);
-  const [cForm, setCForm] = useState({ name: "", cargo: "", email: "" });
+  const [cForm, setCForm] = useState({
+    name: "",
+    cargo: "",
+    email: "",
+    isPrimary: true,
+  });
   const [editCIdx, setEditCIdx] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const startEdit = (i: number, text: string) => {
@@ -75,287 +86,125 @@ export function ItemPopover({
   const emailOk = (em: string) =>
     !em || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em);
 
+  const inputBase =
+    "mb-1.5 box-border w-full rounded-md border border-brand-gold/30 px-2.5 py-1.5 font-sans text-xs outline-none";
+
+  const principalLine = (
+    resolvedMainContact ??
+    item.contact ??
+    ""
+  ).trim();
+  const hasPrincipalLine = principalLine.length > 0;
+
   return (
     <div
       onClick={(e) => e.stopPropagation()}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(26,26,26,0.3)",
-        zIndex: 100,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
+      className="fixed inset-0 z-100 flex items-center justify-center bg-brand-black/30"
     >
       <div
-        style={{
-          width: "min(540px,94vw)",
-          maxHeight: "88vh",
-          background: C.white,
-          border: `1px solid ${g}30`,
-          borderRadius: 16,
-          boxShadow: "0 10px 50px rgba(0,0,0,0.12)",
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          animation: "pU 0.3s ease-out",
-        }}
+        className="flex max-h-[88vh] w-[min(540px,94vw)] flex-col overflow-hidden rounded-2xl border border-brand-gold/30 bg-brand-white animate-[pU_0.3s_ease-out]"
+        style={{ boxShadow: "0 10px 50px rgba(0,0,0,0.12)" }}
       >
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "row",
-            gap: 0,
-            padding: "22px 24px 14px",
-            flexShrink: 0,
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-          }}
-        >
-          <div style={{ flex: 1 }}>
-            <span
-              style={{
-                fontSize: 20,
-                fontWeight: 900,
-                color: C.textDk,
-                lineHeight: 1.4,
-                fontFamily: "'Cormorant Garamond',serif",
-              }}
-            >
+        <div className="flex shrink-0 flex-row items-start justify-between gap-0 px-6 pb-3.5 pt-[22px]">
+          <div className="min-w-0 flex-1">
+            <span className="block font-display text-xl font-black leading-snug text-text-dk">
               {item.name}
             </span>
-            {item.contact && !mainContactHidden && (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "row",
-                  gap: 0,
-                  marginTop: 8,
-                  background: `${g}10`,
-                  border: `1px solid ${g}20`,
-                  borderRadius: 8,
-                  padding: "8px 14px",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
+            {hasPrincipalLine && !mainContactHidden && (
+              <div className="mt-2 flex flex-row items-center justify-between gap-0 rounded-lg border border-brand-gold/20 bg-brand-gold/10 px-3.5 py-2">
                 <div>
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 800,
-                      color: g,
-                      textTransform: "uppercase",
-                      letterSpacing: "1px",
-                    }}
-                  >
+                  <span className="text-[10px] font-extrabold uppercase tracking-wide text-brand-gold">
                     Contacto principal:{" "}
                   </span>
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: C.textDk,
-                      fontFamily: "'Cormorant Garamond',serif",
-                    }}
-                  >
-                    {item.contact}
+                  <span className="font-display text-[13px] font-bold text-text-dk">
+                    {principalLine}
                   </span>
                 </div>
                 {onHideMainContact && (
-<button type="button" 
+                  <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       onHideMainContact(item.name);
                     }}
-                    style={{
-                      background: "transparent",
-                      border: `1px solid ${C.pulseRed}25`,
-                      color: C.pulseRed,
-                      borderRadius: 6,
-                      padding: "2px 8px",
-                      fontSize: 10,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      flexShrink: 0,
-                    }}
+                    className="shrink-0 cursor-pointer rounded-md border border-danger/25 px-2 py-0.5 text-[10px] font-bold text-danger bg-transparent"
                   >
                     ×
                   </button>
                 )}
               </div>
             )}
-            {item.contact && mainContactHidden && (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "row",
-                  gap: 0,
-                  marginTop: 8,
-                  background: `${g}06`,
-                  border: `1px solid ${g}15`,
-                  borderRadius: 8,
-                  padding: "8px 14px",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: C.textLt,
-                    fontStyle: "italic",
-                  }}
-                >
+            {hasPrincipalLine && mainContactHidden && (
+              <div className="mt-2 flex flex-row items-center justify-between gap-0 rounded-lg border border-brand-gold/15 bg-brand-gold/6 px-3.5 py-2">
+                <span className="text-[11px] italic text-text-lt">
                   Contacto principal eliminado
                 </span>
                 {onRestoreMainContact && (
-<button type="button" 
+                  <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       onRestoreMainContact(item.name);
                     }}
-                    style={{
-                      background: `${g}12`,
-                      border: `1px solid ${g}25`,
-                      color: g,
-                      borderRadius: 6,
-                      padding: "2px 10px",
-                      fontSize: 10,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      flexShrink: 0,
-                    }}
+                    className="shrink-0 cursor-pointer rounded-md border border-brand-gold/25 bg-brand-gold/15 px-2.5 py-0.5 text-[10px] font-bold text-brand-gold"
                   >
                     Restaurar
                   </button>
                 )}
               </div>
             )}
-            {!item.contact &&
+            {!hasPrincipalLine &&
               (!userContacts || userContacts.length === 0) && (
-                <div
-                  style={{
-                    marginTop: 8,
-                    background: `${C.pulseRed}08`,
-                    border: `1px solid ${C.pulseRed}18`,
-                    borderRadius: 8,
-                    padding: "8px 14px",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: C.pulseRed,
-                    }}
-                  >
+                <div className="mt-2 rounded-lg border border-danger/20 bg-danger/8 px-3.5 py-2">
+                  <span className="text-[11px] font-bold text-danger">
                     ⚠ Pendiente de vinculación
                   </span>
                 </div>
               )}
           </div>
-<button type="button" 
+          <button
+            type="button"
             onClick={onClose}
-            style={{
-              background: "transparent",
-              border: `1px solid ${g}30`,
-              color: C.textLt,
-              borderRadius: 8,
-              width: 32,
-              height: 32,
-              fontSize: 15,
-              cursor: "pointer",
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginLeft: 12,
-            }}
+            className="ml-3 flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-brand-gold/30 bg-transparent text-[15px] text-text-lt"
           >
             ✕
           </button>
         </div>
-        <div style={{ flex: 1, overflowY: "auto", padding: "0 24px 24px" }}>
-          <div
-            style={{
-              borderTop: `1px solid ${g}15`,
-              paddingTop: 14,
-              marginBottom: 10,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "row",
-                gap: 0,
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 10,
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  color: g,
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                }}
-              >
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
+          <div className="mb-2.5 border-t border-brand-gold/15 pt-3.5">
+            <div className="mb-2.5 flex flex-row items-center justify-between gap-0">
+              <span className="text-[11px] font-extrabold uppercase tracking-wide text-brand-gold">
                 Contactos{" "}
                 {userContacts && userContacts.length > 0
                   ? `(${userContacts.length})`
                   : ""}
               </span>
-<button type="button" 
+              <button
+                type="button"
                 onClick={() => {
                   setShowAddC(true);
-                  setCForm({ name: "", cargo: "", email: "" });
+                  setCForm({
+                    name: "",
+                    cargo: "",
+                    email: "",
+                    isPrimary: !(userContacts || []).some((x) => x.isPrimary),
+                  });
                   setEditCIdx(null);
                 }}
-                style={{
-                  fontSize: 10,
-                  fontWeight: 800,
-                  color: g,
-                  background: `${g}12`,
-                  border: `1px solid ${g}25`,
-                  borderRadius: 6,
-                  padding: "3px 12px",
-                  cursor: "pointer",
-                }}
+                className="cursor-pointer rounded-md border border-brand-gold/25 bg-brand-gold/15 px-3 py-0.5 text-[10px] font-extrabold text-brand-gold"
               >
                 + Agregar
               </button>
             </div>
             {showAddC && (
-              <div
-                style={{
-                  background: `${g}06`,
-                  border: `1px solid ${g}20`,
-                  borderRadius: 10,
-                  padding: "12px 14px",
-                  marginBottom: 10,
-                }}
-              >
+              <div className="mb-2.5 rounded-[10px] border border-brand-gold/20 bg-brand-gold/6 px-3.5 py-3">
                 <input
                   value={cForm.name}
                   onChange={(e) =>
                     setCForm((p) => ({ ...p, name: e.target.value }))
                   }
                   placeholder="Nombre *"
-                  style={{
-                    width: "100%",
-                    padding: "7px 10px",
-                    fontSize: 12,
-                    border: `1px solid ${g}30`,
-                    borderRadius: 6,
-                    outline: "none",
-                    marginBottom: 6,
-                    boxSizing: "border-box",
-                    fontFamily: "'Source Sans 3',sans-serif",
-                  }}
+                  className={inputBase}
                 />
                 <input
                   value={cForm.cargo}
@@ -363,17 +212,7 @@ export function ItemPopover({
                     setCForm((p) => ({ ...p, cargo: e.target.value }))
                   }
                   placeholder="Cargo (opcional)"
-                  style={{
-                    width: "100%",
-                    padding: "7px 10px",
-                    fontSize: 12,
-                    border: `1px solid ${g}30`,
-                    borderRadius: 6,
-                    outline: "none",
-                    marginBottom: 6,
-                    boxSizing: "border-box",
-                    fontFamily: "'Source Sans 3',sans-serif",
-                  }}
+                  className={inputBase}
                 />
                 <input
                   value={cForm.email}
@@ -382,24 +221,28 @@ export function ItemPopover({
                   }
                   placeholder="Correo electrónico"
                   type="email"
-                  style={{
-                    width: "100%",
-                    padding: "7px 10px",
-                    fontSize: 12,
-                    border: `1px solid ${
-                      cForm.email && !emailOk(cForm.email)
-                        ? C.pulseRed
-                        : g
-                    }30`,
-                    borderRadius: 6,
-                    outline: "none",
-                    marginBottom: 8,
-                    boxSizing: "border-box",
-                    fontFamily: "'Source Sans 3',sans-serif",
-                  }}
+                  className={cn(
+                    inputBase,
+                    "mb-2",
+                    cForm.email && !emailOk(cForm.email)
+                      ? "border-danger/40"
+                      : ""
+                  )}
                 />
-                <div style={{ display: "flex", flexDirection: "row", gap: 6 }}>
-<button type="button" 
+                <label className="mb-2 flex cursor-pointer items-center gap-2 text-[11px] font-semibold text-text-dk">
+                  <input
+                    type="checkbox"
+                    checked={cForm.isPrimary}
+                    onChange={(e) =>
+                      setCForm((p) => ({ ...p, isPrimary: e.target.checked }))
+                    }
+                    className="h-3.5 w-3.5 accent-brand-gold"
+                  />
+                  Contacto principal (solo uno por nodo)
+                </label>
+                <div className="flex flex-row gap-1.5">
+                  <button
+                    type="button"
                     onClick={() => {
                       if (!cForm.name.trim()) return;
                       if (cForm.email && !emailOk(cForm.email)) return;
@@ -409,38 +252,29 @@ export function ItemPopover({
                       } else {
                         onAddContact({ ...cForm });
                       }
-                      setCForm({ name: "", cargo: "", email: "" });
+                      setCForm({
+                        name: "",
+                        cargo: "",
+                        email: "",
+                        isPrimary: true,
+                      });
                       setShowAddC(false);
                     }}
-                    style={{
-                      padding: "6px 16px",
-                      fontSize: 11,
-                      fontWeight: 800,
-                      color: C.white,
-                      background: g,
-                      border: "none",
-                      borderRadius: 6,
-                      cursor: "pointer",
-                      opacity: cForm.name.trim() ? 1 : 0.5,
-                    }}
+                    className={cn(
+                      "cursor-pointer rounded-md border-none px-4 py-1.5 text-[11px] font-extrabold text-brand-white",
+                      "bg-brand-gold",
+                      !cForm.name.trim() && "opacity-50"
+                    )}
                   >
                     {editCIdx !== null ? "Guardar cambios" : "Agregar contacto"}
                   </button>
-<button type="button" 
+                  <button
+                    type="button"
                     onClick={() => {
                       setShowAddC(false);
                       setEditCIdx(null);
                     }}
-                    style={{
-                      padding: "6px 16px",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: C.textLt,
-                      background: "transparent",
-                      border: `1px solid ${g}30`,
-                      borderRadius: 6,
-                      cursor: "pointer",
-                    }}
+                    className="cursor-pointer rounded-md border border-brand-gold/30 bg-transparent px-4 py-1.5 text-[11px] font-bold text-text-lt"
                   >
                     Cancelar
                   </button>
@@ -450,93 +284,66 @@ export function ItemPopover({
             {(userContacts || []).map((c, i) => (
               <div
                 key={i}
-                style={{
-                  display: "flex",
-                  flexDirection: "row",
-                  gap: 10,
-                  alignItems: "flex-start",
-                  padding: "8px 0",
-                  borderBottom: `1px solid ${g}08`,
-                }}
+                className="flex flex-row items-start gap-2.5 border-b border-brand-gold/8 py-2"
               >
-                <div
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    background: C.green,
-                    flexShrink: 0,
-                    marginTop: 5,
-                  }}
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: C.textDk,
-                    }}
-                  >
+                <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-green" />
+                <div className="min-w-0 flex-1">
+                  <span className="text-[13px] font-bold text-text-dk">
                     {c.name}
                   </span>
+                  {c.isPrimary && (
+                    <span className="ml-1.5 rounded-md border border-brand-gold/35 bg-brand-gold/15 px-1.5 py-px text-[9px] font-extrabold uppercase tracking-wide text-brand-gold">
+                      Principal
+                    </span>
+                  )}
                   {c.cargo && (
-                    <span style={{ fontSize: 11, color: C.textMd }}>
+                    <span className="ml-0 block text-[11px] text-text-md">
                       {c.cargo}
                     </span>
                   )}
                   {c.email && (
-                    <span style={{ fontSize: 11, color: C.blue }}>
+                    <span className="ml-0 block text-[11px] text-brand-blue">
                       {c.email}
                     </span>
                   )}
                 </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "row",
-                    gap: 3,
-                    flexShrink: 0,
-                  }}
-                >
-<button type="button" 
+                <div className="flex shrink-0 flex-row flex-wrap justify-end gap-0.5">
+                  {!c.isPrimary && onSetPrimaryContact && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSetPrimaryContact(i);
+                      }}
+                      className="cursor-pointer rounded-[5px] border border-brand-gold/40 bg-brand-gold/10 px-2 py-0.5 text-[9px] font-bold text-brand-gold"
+                    >
+                      Hacer principal
+                    </button>
+                  )}
+                  <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       setCForm({
                         name: c.name,
                         cargo: c.cargo || "",
                         email: c.email || "",
+                        isPrimary: !!c.isPrimary,
                       });
                       setEditCIdx(i);
                       setShowAddC(true);
                     }}
-                    style={{
-                      background: "transparent",
-                      border: `1px solid ${g}30`,
-                      color: g,
-                      borderRadius: 5,
-                      padding: "2px 8px",
-                      fontSize: 9,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
+                    className="cursor-pointer rounded-[5px] border border-brand-gold/30 bg-transparent px-2 py-0.5 text-[9px] font-bold text-brand-gold"
                   >
                     Editar
                   </button>
-<button type="button" 
+                  <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       onDelContact(i);
                     }}
-                    style={{
-                      background: "transparent",
-                      border: `1px solid ${C.pulseRed}25`,
-                      color: C.pulseRed,
-                      borderRadius: 5,
-                      padding: "2px 8px",
-                      fontSize: 9,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
+                    className="cursor-pointer rounded-[5px] border border-danger/25 bg-transparent px-2 py-0.5 text-[9px] font-bold text-danger"
                   >
                     ×
                   </button>
@@ -544,46 +351,20 @@ export function ItemPopover({
               </div>
             ))}
           </div>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              gap: 4,
-              flexWrap: "wrap",
-              marginBottom: 14,
-              alignItems: "center",
-            }}
-          >
+          <div className="mb-3.5 flex flex-row flex-wrap items-center gap-1">
             {(itemTags || []).map((tg, i) => (
               <span
                 key={i}
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: g,
-                  background: `${g}12`,
-                  border: `1px solid ${g}25`,
-                  borderRadius: 12,
-                  padding: "2px 8px 2px 10px",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 3,
-                }}
+                className="inline-flex items-center gap-0.5 rounded-xl border border-brand-gold/25 bg-brand-gold/15 py-0.5 pl-2.5 pr-0.5 text-[10px] font-bold text-brand-gold"
               >
                 {tg}
-<button type="button" 
+                <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (onRmTag) onRmTag(item.name, tg);
                   }}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    color: C.pulseRed,
-                    fontSize: 11,
-                    cursor: "pointer",
-                    padding: 0,
-                  }}
+                  className="cursor-pointer border-none bg-transparent p-0 text-[11px] text-danger"
                 >
                   ×
                 </button>
@@ -598,15 +379,7 @@ export function ItemPopover({
                 }
               }}
               defaultValue=""
-              style={{
-                fontSize: 9,
-                padding: "2px 4px",
-                border: `1px solid ${g}25`,
-                borderRadius: 6,
-                color: g,
-                background: C.white,
-                cursor: "pointer",
-              }}
+              className="cursor-pointer rounded-md border border-brand-gold/25 bg-brand-white px-1 py-0.5 text-[9px] text-brand-gold"
             >
               <option value="">+</option>
               {TAGS.slice()
@@ -619,17 +392,8 @@ export function ItemPopover({
                 ))}
             </select>
           </div>
-          <div style={{ borderTop: `1px solid ${g}15`, paddingTop: 14 }}>
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 800,
-                color: g,
-                textTransform: "uppercase",
-                letterSpacing: "1px",
-                marginBottom: 8,
-              }}
-            >
+          <div className="border-t border-brand-gold/15 pt-3.5">
+            <span className="mb-2 block text-[11px] font-extrabold uppercase tracking-wide text-brand-gold">
               Nueva nota
             </span>
             <RichEditor
@@ -637,129 +401,59 @@ export function ItemPopover({
               value=""
               onChange={setNoteText}
               placeholder="Escribir nota..."
-              palette={palette}
             />
-<button type="button" 
+            <button
+              type="button"
               onClick={onSave}
-              style={{
-                marginTop: 8,
-                padding: "8px 22px",
-                fontSize: 12,
-                fontWeight: 800,
-                color: C.white,
-                background: g,
-                border: "none",
-                borderRadius: 8,
-                cursor: "pointer",
-                opacity: noteText.replace(/<[^>]*>/g, "").trim() ? 1 : 0.5,
-              }}
+              className={cn(
+                "mt-2 cursor-pointer rounded-lg border-none bg-brand-gold px-[22px] py-2 text-xs font-extrabold text-brand-white",
+                !noteText.replace(/<[^>]*>/g, "").trim() && "opacity-50"
+              )}
             >
               Guardar nota
             </button>
           </div>
           {noteHistory && noteHistory.length > 0 && (
-            <div
-              style={{
-                marginTop: 18,
-                borderTop: `1px solid ${g}15`,
-                paddingTop: 14,
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  color: g,
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                  marginBottom: 10,
-                }}
-              >
+            <div className="mt-[18px] border-t border-brand-gold/15 pt-3.5">
+              <span className="mb-2.5 block text-[11px] font-extrabold uppercase tracking-wide text-brand-gold">
                 Notas guardadas ({noteHistory.length})
               </span>
               {noteHistory.map((note, i) => (
                 <div
                   key={i}
-                  style={{
-                    background: `${g}06`,
-                    border: `1px solid ${g}15`,
-                    borderRadius: 10,
-                    padding: "12px 14px",
-                    marginBottom: 8,
-                  }}
+                  className="mb-2 rounded-[10px] border border-brand-gold/15 bg-brand-gold/6 px-3.5 py-3"
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "row",
-                      gap: 0,
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 6,
-                    }}
-                  >
+                  <div className="mb-1.5 flex flex-row items-center justify-between gap-0">
                     <div>
-                      <span
-                        style={{
-                          fontSize: 10,
-                          color: C.textLt,
-                          fontWeight: 600,
-                        }}
-                      >
+                      <span className="text-[10px] font-semibold text-text-lt">
                         {note.date || "Sin fecha"}
                       </span>
                       {note.edited && (
-                        <span
-                          style={{
-                            fontSize: 9,
-                            color: g,
-                            fontWeight: 600,
-                            marginLeft: 8,
-                          }}
-                        >
+                        <span className="ml-2 text-[9px] font-semibold text-brand-gold">
                           editado {note.edited}
                         </span>
                       )}
                     </div>
-                    <div style={{ display: "flex", flexDirection: "row", gap: 4 }}>
+                    <div className="flex flex-row gap-1">
                       {editIdx !== i && (
-<button type="button" 
+                        <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            startEdit(
-                              i,
-                              String(note.text ?? "")
-                            );
+                            startEdit(i, String(note.text ?? ""));
                           }}
-                          style={{
-                            background: "transparent",
-                            border: `1px solid ${g}30`,
-                            color: g,
-                            borderRadius: 6,
-                            padding: "2px 10px",
-                            fontSize: 10,
-                            fontWeight: 700,
-                            cursor: "pointer",
-                          }}
+                          className="cursor-pointer rounded-md border border-brand-gold/30 bg-transparent px-2.5 py-0.5 text-[10px] font-bold text-brand-gold"
                         >
                           Editar
                         </button>
                       )}
-<button type="button" 
+                      <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           onDelete(i);
                         }}
-                        style={{
-                          background: "transparent",
-                          border: `1px solid ${C.pulseRed}25`,
-                          color: C.pulseRed,
-                          borderRadius: 6,
-                          padding: "2px 10px",
-                          fontSize: 10,
-                          fontWeight: 700,
-                          cursor: "pointer",
-                        }}
+                        className="cursor-pointer rounded-md border border-danger/25 bg-transparent px-2.5 py-0.5 text-[10px] font-bold text-danger"
                       >
                         Eliminar
                       </button>
@@ -771,43 +465,19 @@ export function ItemPopover({
                         key={editIdx}
                         value={editText}
                         onChange={setEditText}
-                        palette={palette}
                       />
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "row",
-                          gap: 6,
-                          marginTop: 6,
-                        }}
-                      >
-<button type="button" 
+                      <div className="mt-1.5 flex flex-row gap-1.5">
+                        <button
+                          type="button"
                           onClick={() => confirmEdit(i)}
-                          style={{
-                            padding: "5px 16px",
-                            fontSize: 11,
-                            fontWeight: 800,
-                            color: C.white,
-                            background: g,
-                            border: "none",
-                            borderRadius: 6,
-                            cursor: "pointer",
-                          }}
+                          className="cursor-pointer rounded-md border-none bg-brand-gold px-4 py-1.5 text-[11px] font-extrabold text-brand-white"
                         >
                           Guardar cambios
                         </button>
-<button type="button" 
+                        <button
+                          type="button"
                           onClick={cancelEdit}
-                          style={{
-                            padding: "5px 16px",
-                            fontSize: 11,
-                            fontWeight: 700,
-                            color: C.textLt,
-                            background: "transparent",
-                            border: `1px solid ${g}30`,
-                            borderRadius: 6,
-                            cursor: "pointer",
-                          }}
+                          className="cursor-pointer rounded-md border border-brand-gold/30 bg-transparent px-4 py-1.5 text-[11px] font-bold text-text-lt"
                         >
                           Cancelar
                         </button>
@@ -815,12 +485,7 @@ export function ItemPopover({
                     </div>
                   ) : (
                     <div
-                      style={{
-                        fontSize: 13,
-                        color: C.textDk,
-                        lineHeight: 1.6,
-                        fontFamily: "'Source Sans 3',sans-serif",
-                      }}
+                      className="font-sans text-[13px] leading-relaxed text-text-dk"
                       dangerouslySetInnerHTML={{
                         __html: String(note.text ?? ""),
                       }}
@@ -831,100 +496,45 @@ export function ItemPopover({
             </div>
           )}
           {onDeleteNode && (
-            <div
-              style={{
-                borderTop: `1px solid ${C.pulseRed}15`,
-                padding: "14px 0 0",
-                marginTop: 14,
-              }}
-            >
+            <div className="mt-3.5 border-t border-danger/15 pt-3.5">
               {!confirmDel ? (
-<button type="button" 
+                <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setConfirmDel(true);
                   }}
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: C.pulseRed,
-                    background: `${C.pulseRed}08`,
-                    border: `1px solid ${C.pulseRed}20`,
-                    borderRadius: 8,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 6,
-                  }}
+                  className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-danger/20 bg-danger/8 p-2.5 text-xs font-bold text-danger"
                 >
                   ❌ Eliminar este nodo
                 </button>
               ) : (
-                <div
-                  style={{
-                    background: `${C.pulseRed}08`,
-                    border: `1px solid ${C.pulseRed}20`,
-                    borderRadius: 10,
-                    padding: "12px 14px",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: C.pulseRed,
-                      marginBottom: 8,
-                    }}
-                  >
+                <div className="rounded-[10px] border border-danger/20 bg-danger/8 px-3.5 py-3">
+                  <span className="mb-2 block text-xs font-bold text-danger">
                     ¿Eliminar &quot;{item.name}&quot;?
                   </span>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: C.textLt,
-                      marginBottom: 10,
-                    }}
-                  >
+                  <span className="mb-2.5 block text-[11px] text-text-lt">
                     Se eliminará el nodo, sus contactos y notas. Esta acción no
                     se puede deshacer.
                   </span>
-                  <div style={{ display: "flex", flexDirection: "row", gap: 8 }}>
-<button type="button" 
+                  <div className="flex flex-row gap-2">
+                    <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         onDeleteNode();
                       }}
-                      style={{
-                        padding: "8px 20px",
-                        fontSize: 12,
-                        fontWeight: 800,
-                        color: C.white,
-                        background: C.pulseRed,
-                        border: "none",
-                        borderRadius: 8,
-                        cursor: "pointer",
-                      }}
+                      className="cursor-pointer rounded-lg border-none bg-danger px-5 py-2 text-xs font-extrabold text-brand-white"
                     >
                       Sí, eliminar
                     </button>
-<button type="button" 
+                    <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         setConfirmDel(false);
                       }}
-                      style={{
-                        padding: "8px 20px",
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: C.textLt,
-                        background: "transparent",
-                        border: `1px solid ${g}30`,
-                        borderRadius: 8,
-                        cursor: "pointer",
-                      }}
+                      className="cursor-pointer rounded-lg border border-brand-gold/30 bg-transparent px-5 py-2 text-xs font-bold text-text-lt"
                     >
                       Cancelar
                     </button>

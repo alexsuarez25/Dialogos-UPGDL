@@ -1,5 +1,5 @@
 import type { DescSection } from "../../../types/nodes";
-import type { Palette } from "../../../types/palette";
+import { cn } from "../../../lib/cn";
 
 type CentralDescribe = {
   title?: string;
@@ -14,117 +14,50 @@ export function CentralPanel({
   onClose,
   isCentral,
   resolveTags,
-  palette,
+  className,
 }: {
   data: CentralDescribe | null;
   accent?: string;
   onClose: () => void;
   isCentral: boolean;
   resolveTags: (title: string) => string[];
-  palette: Palette;
+  className?: string;
 }) {
-  const C = palette;
-  const gold = C.gold;
+  const footerAccent = accent ?? undefined;
   return (
     <div
-      style={{
-        position: "absolute",
-        top: 0,
-        right: 0,
-        width: 420,
-        height: "100%",
-        zIndex: 30,
-        background: C.panelBg,
-        borderLeft: `2px solid ${gold}40`,
-        boxShadow: "-6px 0 36px rgba(0,0,0,0.08)",
-        display: "flex",
-        flexDirection: "column",
-        animation: "slI 0.45s cubic-bezier(0.22,1,0.36,1)",
-      }}
+      className={cn(
+        "absolute right-0 top-0 z-30 flex h-full w-[420px] animate-[slI_0.45s_cubic-bezier(0.22,1,0.36,1)] flex-col border-l-2 border-l-brand-gold/40 bg-surface-panel",
+        className
+      )}
+      style={{ boxShadow: "-6px 0 36px rgba(0,0,0,0.08)" }}
     >
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "row",
-          gap: 0,
-          padding: "22px 24px 16px",
-          borderBottom: `1px solid ${gold}25`,
-          flexShrink: 0,
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-        }}
-      >
-        <div style={{ flex: 1, paddingRight: 12 }}>
-          <span
-            style={{
-              fontSize: 10,
-              color: gold,
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: "1.5px",
-              marginBottom: 6,
-            }}
-          >
+      <div className="flex shrink-0 flex-row items-start justify-between gap-0 border-b border-b-brand-gold/25 px-6 pb-4 pt-[22px]">
+        <div className="flex-1 pr-3">
+          <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-brand-gold">
             {isCentral ? "Universidad Panamericana" : "Proyecto"}
           </span>
-          <span
-            style={{
-              fontSize: 22,
-              fontWeight: 900,
-              color: C.textDk,
-              lineHeight: 1.3,
-              fontFamily: "'Cormorant Garamond',serif",
-              display: "block",
-            }}
-          >
+          <span className="block font-display text-[22px] font-black leading-snug text-text-dk">
             {data?.title}
           </span>
         </div>
         <button
           type="button"
           onClick={onClose}
-          style={{
-            background: "transparent",
-            border: `1px solid ${gold}40`,
-            color: C.textLt,
-            borderRadius: 8,
-            width: 32,
-            height: 32,
-            fontSize: 15,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
+          className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-brand-gold/40 bg-transparent text-[15px] text-text-lt"
         >
           ✕
         </button>
       </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: "18px 24px 28px" }}>
+      <div className="flex-1 overflow-y-auto px-6 pb-7 pt-[18px]">
         {isCentral ? (
           <>
             {(data?.objetivos || []).map((o, i) => (
-              <div key={i} style={{ marginBottom: 16 }}>
-                <span
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: C.blue,
-                    marginBottom: 4,
-                    display: "block",
-                  }}
-                >
+              <div key={i} className="mb-4">
+                <span className="mb-1 block text-xs font-extrabold text-brand-blue">
                   {o.h}
                 </span>
-                <span
-                  style={{
-                    fontSize: 14,
-                    color: C.textMd,
-                    lineHeight: 1.7,
-                    display: "block",
-                  }}
-                >
+                <span className="block text-sm leading-relaxed text-text-md">
                   {o.t}
                 </span>
               </div>
@@ -133,69 +66,28 @@ export function CentralPanel({
         ) : (
           <>
             {(data?.sections || []).map((s, i) => (
-              <div key={i} style={{ marginBottom: 20 }}>
+              <div key={i} className="mb-5">
                 <span
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: accent,
-                    textTransform: "uppercase",
-                    letterSpacing: "1.2px",
-                    marginBottom: 6,
-                    display: "block",
-                  }}
+                  className="mb-1.5 block text-xs font-extrabold uppercase tracking-wide text-brand-gold"
+                  style={accent ? { color: accent } : undefined}
                 >
                   {s.h}
                 </span>
-                <span
-                  style={{
-                    fontSize: 16,
-                    color: C.textMd,
-                    lineHeight: 1.8,
-                    display: "block",
-                  }}
-                >
+                <span className="block text-base leading-loose text-text-md">
                   {s.t}
                 </span>
               </div>
             ))}
             {(data?.escuelas?.length || 0) > 0 && (
-              <div
-                style={{
-                  marginTop: 8,
-                  paddingTop: 18,
-                  borderTop: `1px solid ${gold}20`,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: gold,
-                    textTransform: "uppercase",
-                    letterSpacing: "1.2px",
-                    marginBottom: 10,
-                    display: "block",
-                  }}
-                >
+              <div className="mt-2 border-t border-brand-gold/20 pt-[18px]">
+                <span className="mb-2.5 block text-xs font-extrabold uppercase tracking-wide text-brand-gold">
                   Escuelas y Facultades
                 </span>
-                <ul
-                  style={{
-                    margin: 0,
-                    paddingLeft: 20,
-                    listStyleType: "disc",
-                  }}
-                >
+                <ul className="ml-5 list-disc">
                   {(data?.escuelas || []).map((e, i) => (
                     <li
                       key={i}
-                      style={{
-                        fontSize: 15,
-                        color: C.textMd,
-                        lineHeight: 2.1,
-                        fontWeight: 600,
-                      }}
+                      className="text-[15px] font-semibold leading-[2.1] text-text-md"
                     >
                       {e}
                     </li>
@@ -204,46 +96,15 @@ export function CentralPanel({
               </div>
             )}
             {data?.title && resolveTags(data.title).length > 0 && (
-              <div
-                style={{
-                  marginTop: 12,
-                  paddingTop: 14,
-                  borderTop: `1px solid ${gold}20`,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: gold,
-                    textTransform: "uppercase",
-                    letterSpacing: "1.2px",
-                    marginBottom: 8,
-                    display: "block",
-                  }}
-                >
+              <div className="mt-3 border-t border-brand-gold/20 pt-3.5">
+                <span className="mb-2 block text-xs font-extrabold uppercase tracking-wide text-brand-gold">
                   Temáticas estratégicas
                 </span>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "row",
-                    gap: 6,
-                    flexWrap: "wrap",
-                  }}
-                >
+                <div className="flex flex-row flex-wrap gap-1.5">
                   {resolveTags(data.title).map((tg, i) => (
                     <span
                       key={i}
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        color: gold,
-                        background: `${gold}12`,
-                        border: `1px solid ${gold}22`,
-                        borderRadius: 12,
-                        padding: "3px 12px",
-                      }}
+                      className="rounded-xl border border-brand-gold/25 bg-brand-gold/15 px-3 py-0.5 text-[10px] font-bold text-brand-gold"
                     >
                       {tg}
                     </span>
@@ -255,10 +116,9 @@ export function CentralPanel({
         )}
       </div>
       <div
+        className="h-[3px] shrink-0"
         style={{
-          height: 3,
-          background: `linear-gradient(90deg,${accent || gold},${gold})`,
-          flexShrink: 0,
+          background: `linear-gradient(90deg,${footerAccent || "var(--color-brand-gold)"},var(--color-brand-gold))`,
         }}
       />
     </div>

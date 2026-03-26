@@ -1,6 +1,10 @@
 # Mapa de Diálogos – Vite + React
 
-Interactive map for **Diálogos con el Entorno** (Universidad Panamericana Guadalajara). The app uses **React 18**, **TypeScript**, **Vite 5**, and **Firebase** (Realtime Database + Analytics).
+Interactive map for **Diálogos con el Entorno** (Universidad Panamericana Guadalajara). The app uses **React 18**, **TypeScript**, **Vite 5**, **Tailwind CSS v4** (via `@tailwindcss/vite`), and **Firebase** (Realtime Database + Analytics).
+
+## Styling
+
+Static chrome uses **Tailwind** utilities. Design tokens (brand colors, fonts, radii, shadows) are defined in **`src/index.css`** inside the `@theme` block. The same hex values for the `C` object are kept in **`src/lib/designTokens.ts`** for SVG fills, search result accents, and other non-Tailwind uses—update both when changing brand colors. **Map nodes and breadcrumbs** still use catalog-driven colors (`branch.color`, etc.) inline or on SVG elements.
 
 ## Prerequisites
 

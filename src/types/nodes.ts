@@ -1,5 +1,3 @@
-import type { Palette } from "./palette";
-
 export interface MainBranch {
   key: string;
   name: string;
@@ -42,6 +40,8 @@ export interface ContactRow {
   name: string;
   cargo?: string;
   email?: string;
+  /** At most one per node; drives map/list “main” contact line */
+  isPrimary?: boolean;
 }
 
 export interface FbContactoRecord {
@@ -52,6 +52,8 @@ export interface FbContactoRecord {
   cargo: string;
   email: string;
   notas: string;
+  /** When true, this row is the sole primary for `parentKey` */
+  primary?: boolean;
 }
 
 export interface DescSection {
@@ -86,9 +88,4 @@ export interface CentralCopy {
   title: string;
   intro: string;
   objetivos: DescSection[];
-}
-
-/** Props bundle for map text helper */
-export interface MapTextStyle {
-  palette: Palette;
 }

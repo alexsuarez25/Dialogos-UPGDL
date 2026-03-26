@@ -11,6 +11,7 @@ export type LocalContactRowPersisted = {
   cargo?: string;
   email?: string;
   fbId?: string;
+  isPrimary?: boolean;
 };
 
 export type MapAppStateV1 = {

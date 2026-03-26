@@ -68,12 +68,57 @@ export type UserContactRow = {
   cargo?: string;
   email?: string;
   notas?: string;
+  /** If true, becomes the only primary for this parent (others cleared). */
+  primary?: boolean;
 };
 
 /**
  * Varios documentos bajo `contactos/{id}` con el mismo `parentKey` (= nombre exacto del nodo).
  * Elimina todos los que enlazan a ese nodo (y migraciones viejas: un doc con patron exacto sin parentKey).
  */
+async function clearPrimaryForParent(parentKey: string): Promise<void> {
+  const pk = parentKey.trim();
+  if (!pk) return;
+  const all = await getAllContactos();
+  if (!all) return;
+  const tasks: Promise<void>[] = [];
+  for (const [id, val] of Object.entries(all)) {
+    const o = val as ContactoData & { parentKey?: string; primary?: boolean };
+    if (String(o.parentKey ?? "").trim() !== pk) continue;
+    if (o.primary === true) {
+      tasks.push(
+        updateContacto(id, { primary: false, updatedAt: Date.now() })
+      );
+    }
+  }
+  await Promise.all(tasks);
+}
+
+/** Mark one Firebase contact as primary for its `parentKey`; clears primary on siblings. */
+export async function setPrimaryContactForParent(
+  parentKey: string,
+  fbId: string
+): Promise<void> {
+  const pk = parentKey.trim();
+  const target = String(fbId || "").trim();
+  if (!pk || !target) throw new Error("parentKey y fbId son obligatorios");
+  const all = await getAllContactos();
+  if (!all) return;
+  const tasks: Promise<void>[] = [];
+  for (const [id, val] of Object.entries(all)) {
+    const o = val as ContactoData & { parentKey?: string };
+    if (String(o.parentKey ?? "").trim() !== pk) continue;
+    const want = id === target;
+    tasks.push(
+      updateContacto(id, {
+        primary: want,
+        updatedAt: Date.now(),
+      })
+    );
+  }
+  await Promise.all(tasks);
+}
+
 export async function removeContactosLinkedToNode(nodeName: string): Promise<number> {
   const p = nodeName.trim();
   if (!p) return 0;
@@ -106,15 +151,27 @@ export async function replaceContactosForParent(
   const pk = parentKey.trim();
   if (!pk) return;
   await removeContactosLinkedToNode(pk);
-  for (const row of rows) {
-    const nombre = String(row.name || "").trim();
-    if (!nombre) continue;
+  const valid = rows
+    .map((r) => ({
+      nombre: String(r.name || "").trim(),
+      cargo: String(r.cargo || "").trim(),
+      email: String(r.email || "").trim(),
+      primary: r.primary === true,
+    }))
+    .filter((r) => r.nombre);
+  const anyMarked = valid.some((r) => r.primary);
+  let primaryAssigned = false;
+  for (const row of valid) {
+    let isPrimary = row.primary && !primaryAssigned;
+    if (isPrimary) primaryAssigned = true;
+    if (!anyMarked && valid.length === 1) isPrimary = true;
     await createContacto({
       parentKey: pk,
-      nombre,
-      cargo: String(row.cargo || "").trim(),
-      email: String(row.email || "").trim(),
+      nombre: row.nombre,
+      cargo: row.cargo,
+      email: row.email,
       notas: "",
+      primary: isPrimary,
       source: "itempop",
       updatedAt: Date.now(),
     });
@@ -129,12 +186,14 @@ export async function appendContactoForNieto(
   const pk = parentKey.trim();
   const nm = nombre.trim();
   if (!pk || !nm) throw new Error("parentKey y nombre son obligatorios");
+  await clearPrimaryForParent(pk);
   return createContacto({
     parentKey: pk,
     nombre: nm,
     cargo: "",
     email: "",
     notas: "",
+    primary: true,
     source: "nieto",
     updatedAt: Date.now(),
   });
@@ -148,12 +207,15 @@ export async function appendContactoForParent(
   const pk = parentKey.trim();
   const nombre = String(row.name || "").trim();
   if (!pk || !nombre) throw new Error("parentKey y nombre son obligatorios");
+  const makePrimary = row.primary === true;
+  if (makePrimary) await clearPrimaryForParent(pk);
   return createContacto({
     parentKey: pk,
     nombre,
     cargo: String(row.cargo || "").trim(),
     email: String(row.email || "").trim(),
     notas: String(row.notas || "").trim(),
+    primary: makePrimary,
     source: "itempop",
     updatedAt: Date.now(),
   });

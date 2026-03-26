@@ -4,6 +4,7 @@ import { customNietosForChildKey } from "../../../lib/firebase/mapCustomNodesRea
 import { TAGS } from "../../../tagMapDefault.js";
 import { getTags } from "../../../lib/tagMapStore";
 import type { NoteRow } from "../../../types/nodes";
+import { cn } from "../../../lib/cn";
 
 export type MobileTreeProps = {
   hasContact: (name: string) => boolean;
@@ -100,93 +101,32 @@ export function MobileTree({
     viewItem ? (
       <div
         onClick={() => setViewItem(null)}
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.3)",
-          zIndex: 100,
-          display: "flex",
-          alignItems: "flex-end",
-        }}
+        className="fixed inset-0 z-100 flex items-end bg-black/30"
       >
         <div
           onClick={(e) => e.stopPropagation()}
-          style={{
-            width: "100%",
-            maxHeight: "80vh",
-            background: "#FFFDF8",
-            borderRadius: "16px 16px 0 0",
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-          }}
+          className="flex max-h-[80vh] w-full flex-col overflow-hidden rounded-t-2xl bg-[#FFFDF8]"
         >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              gap: 0,
-              padding: "18px 20px 12px",
-              borderBottom: "1px solid #C4A55A33",
-              justifyContent: "space-between",
-              flexShrink: 0,
-            }}
-          >
-            <div style={{ flex: 1 }}>
-              <span
-                style={{
-                  fontSize: 18,
-                  fontWeight: 900,
-                  color: "#2A2520",
-                }}
-              >
+          <div className="flex shrink-0 flex-row items-start justify-between gap-0 border-b border-brand-gold/20 px-5 pb-3 pt-[18px]">
+            <div className="min-w-0 flex-1">
+              <span className="block text-lg font-black text-text-dk">
                 {viewItem.name || ""}
               </span>
               {gc(viewItem.name) ? (
-                <span
-                  style={{
-                    marginTop: 6,
-                    fontSize: 12,
-                    color: "#C4A55A",
-                    fontWeight: 600,
-                  }}
-                >
+                <span className="mt-1.5 block text-xs font-semibold text-brand-gold">
                   👤 {gc(viewItem.name)}
                 </span>
               ) : (
-                <span
-                  style={{
-                    marginTop: 6,
-                    fontSize: 11,
-                    color: "#CC3333",
-                    fontWeight: 600,
-                  }}
-                >
+                <span className="mt-1.5 block text-[11px] font-semibold text-danger">
                   ⚠ Sin contacto
                 </span>
               )}
               {resolveTags(viewItem.name).length > 0 && (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "row",
-                    gap: 4,
-                    flexWrap: "wrap",
-                    marginTop: 8,
-                  }}
-                >
+                <div className="mt-2 flex flex-row flex-wrap gap-1">
                   {resolveTags(viewItem.name).map((tg, i) => (
                     <span
                       key={i}
-                      style={{
-                        fontSize: 9,
-                        fontWeight: 700,
-                        color: "#C4A55A",
-                        background: "#C4A55A1F",
-                        border: "1px solid #C4A55A40",
-                        borderRadius: 10,
-                        padding: "2px 8px",
-                      }}
+                      className="rounded-[10px] border border-brand-gold/40 bg-brand-gold/15 px-2 py-0.5 text-[9px] font-bold text-brand-gold"
                     >
                       {tg}
                     </span>
@@ -194,42 +134,19 @@ export function MobileTree({
                 </div>
               )}
             </div>
-<button type="button" 
+            <button
+              type="button"
               onClick={() => setViewItem(null)}
-              style={{
-                background: "transparent",
-                border: "1px solid #C4A55A50",
-                borderRadius: 8,
-                width: 32,
-                height: 32,
-                fontSize: 15,
-                cursor: "pointer",
-                color: "#8A8070",
-              }}
+              className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-brand-gold/50 bg-transparent text-[15px] text-text-lt"
             >
               ✕
             </button>
           </div>
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              padding: "12px 20px 20px",
-            }}
-          >
+          <div className="flex-1 overflow-y-auto px-5 pb-5 pt-3">
             {Array.isArray(notes[viewItem.name]) &&
             notes[viewItem.name].length > 0 ? (
               <div>
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 800,
-                    color: "#C4A55A",
-                    textTransform: "uppercase",
-                    letterSpacing: "1px",
-                    marginBottom: 8,
-                  }}
-                >
+                <span className="mb-2 block text-[10px] font-extrabold uppercase tracking-wide text-brand-gold">
                   Notas ({notes[viewItem.name].length})
                 </span>
                 {(notes[viewItem.name] || [])
@@ -237,25 +154,12 @@ export function MobileTree({
                   .map((n, i) => (
                     <div
                       key={i}
-                      style={{
-                        background: "#C4A55A0A",
-                        borderRadius: 8,
-                        padding: 10,
-                        marginBottom: 6,
-                      }}
+                      className="mb-1.5 rounded-lg bg-brand-gold/6 p-2.5"
                     >
-                      <span
-                        style={{ fontSize: 10, color: "#8A8070" }}
-                      >
+                      <span className="text-[10px] text-text-lt">
                         {n.date || ""}
                       </span>
-                      <span
-                        style={{
-                          fontSize: 12,
-                          color: "#2A2520",
-                          marginTop: 3,
-                        }}
-                      >
+                      <span className="mt-1 block text-xs text-text-dk">
                         {String(
                           (n as NoteRow).text ?? n ?? ""
                         )}
@@ -264,13 +168,7 @@ export function MobileTree({
                   ))}
               </div>
             ) : (
-              <span
-                style={{
-                  fontSize: 12,
-                  color: "#8A8070",
-                  fontStyle: "italic",
-                }}
-              >
+              <span className="text-xs italic text-text-lt">
                 Sin notas registradas
               </span>
             )}
@@ -280,121 +178,46 @@ export function MobileTree({
     ) : null;
 
   return (
-    <div
-      style={{
-        fontFamily:
-          "'Source Sans 3','Segoe UI',system-ui,sans-serif",
-        background: "#F5F2EB",
-        width: "100%",
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}
-    >
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700;800;900&family=Cormorant+Garamond:wght@400;700;800&display=swap" />
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "row",
-          gap: 10,
-          background: "white",
-          padding: "12px 16px",
-          alignItems: "center",
-          flexShrink: 0,
-          borderBottom: "1px solid #C4A55A40",
-        }}
-      >
-        <div
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: "50%",
-            background: "#C4A55A",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <span
-            style={{ fontSize: 11, fontWeight: 900, color: "white" }}
-          >
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-surface-bg font-sans">
+      <div className="flex shrink-0 flex-row items-center gap-2.5 border-b border-brand-gold/40 bg-brand-white px-4 py-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-gold">
+          <span className="text-[11px] font-black text-brand-white">
             UP
           </span>
         </div>
-        <div>
-          <span
-            style={{
-              fontSize: 14,
-              fontWeight: 800,
-              color: "#2A2520",
-              fontFamily: "'Cormorant Garamond',serif",
-            }}
-          >
+        <div className="flex flex-col">
+          <span className="font-display text-sm font-extrabold text-text-dk">
             Diálogos con el Entorno
           </span>
-          <span style={{ fontSize: 9, color: "#8A8070" }}>
+          <span className="text-[9px] text-text-lt">
             Universidad Panamericana Guadalajara
           </span>
         </div>
       </div>
-      <div
-        style={{
-          padding: "10px 16px",
-          background: "white",
-          borderBottom: "1px solid #C4A55A25",
-          flexShrink: 0,
-        }}
-      >
-<button type="button" 
+      <div className="shrink-0 border-b border-brand-gold/25 bg-brand-white px-4 py-2.5">
+        <button
+          type="button"
           onClick={() => setTagOpen((x) => !x)}
-          style={{
-            width: "100%",
-            padding: "11px 14px",
-            fontSize: 14,
-            fontWeight: 600,
-            color: selTag ? "#C4A55A" : "#8A8070",
-            background: selTag ? "#C4A55A0F" : "#C4A55A0A",
-            border: `1px solid ${
-              selTag ? "#C4A55A50" : "#C4A55A30"
-            }`,
-            borderRadius: 10,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            textAlign: "left",
-          }}
+          className={cn(
+            "flex w-full cursor-pointer items-center justify-between rounded-[10px] border px-3.5 py-[11px] text-left text-sm font-semibold",
+            selTag
+              ? "border-brand-gold/50 bg-brand-gold/10 text-brand-gold"
+              : "border-brand-gold/30 bg-brand-gold/6 text-text-lt"
+          )}
         >
-          <span style={{ flex: 1, textAlign: "left" }}>
+          <span className="min-w-0 flex-1 text-left">
             {selTag || "Seleccionar temática estratégica..."}
           </span>
         </button>
         {tagOpen && (
-          <div
-            style={{
-              maxHeight: "35vh",
-              overflowY: "auto",
-              marginTop: 6,
-              border: "1px solid #C4A55A25",
-              borderRadius: 10,
-              background: "white",
-            }}
-          >
+          <div className="mt-1.5 max-h-[35vh] overflow-y-auto rounded-[10px] border border-brand-gold/25 bg-brand-white">
             {selTag ? (
               <div
                 onClick={() => {
                   setSelTag("");
                   setTagOpen(false);
                 }}
-                style={{
-                  padding: "12px 14px",
-                  fontSize: 13,
-                  color: "#CC3333",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  borderBottom: "1px solid #C4A55A10",
-                }}
+                className="cursor-pointer border-b border-brand-gold/10 px-3.5 py-3 text-[13px] font-semibold text-danger"
               >
                 ✕ Limpiar filtro
               </div>
@@ -406,16 +229,10 @@ export function MobileTree({
                   setSelTag(t);
                   setTagOpen(false);
                 }}
-                style={{
-                  padding: "11px 14px",
-                  fontSize: 13,
-                  fontWeight: selTag === t ? 700 : 500,
-                  color: selTag === t ? "#C4A55A" : "#2A2520",
-                  cursor: "pointer",
-                  borderBottom: "1px solid #C4A55A08",
-                  background:
-                    selTag === t ? "#C4A55A0A" : "transparent",
-                }}
+                className={cn(
+                  "cursor-pointer border-b border-brand-gold/8 px-3.5 py-[11px] text-[13px] text-text-dk",
+                  selTag === t ? "bg-brand-gold/10 font-bold text-brand-gold" : "font-medium"
+                )}
               >
                 {t}
               </div>
@@ -423,14 +240,7 @@ export function MobileTree({
           </div>
         )}
         {selTag ? (
-          <span
-            style={{
-              marginTop: 8,
-              fontSize: 11,
-              color: "#C4A55A",
-              fontWeight: 700,
-            }}
-          >
+          <span className="mt-2 block text-[11px] font-bold text-brand-gold">
             {tagMatches.length} resultado
             {tagMatches.length !== 1 ? "s" : ""} para &quot;{selTag}
             &quot;
@@ -438,73 +248,35 @@ export function MobileTree({
         ) : null}
       </div>
       {selTag && tagMatches.length > 0 ? (
-        <div
-          style={{
-            background: "white",
-            borderBottom: "2px solid #C4A55A30",
-            maxHeight: "30vh",
-            overflowY: "auto",
-            flexShrink: 0,
-          }}
-        >
+        <div className="max-h-[30vh] shrink-0 overflow-y-auto border-b-2 border-b-brand-gold/30 bg-brand-white">
           {tagMatches
             .sort((a, b) => a.name.localeCompare(b.name, "es"))
             .map((r, i) => (
               <div
                 key={i}
                 onClick={() => setViewItem(r)}
-                style={{
-                  display: "flex",
-                  flexDirection: "row",
-                  gap: 8,
-                  alignItems: "center",
-                  padding: "12px 16px",
-                  cursor: "pointer",
-                  borderBottom: "1px solid #C4A55A08",
-                }}
+                className="flex cursor-pointer flex-row items-center gap-2 border-b border-brand-gold/8 px-4 py-3"
               >
                 <div
-                  style={{
-                    width: 9,
-                    height: 9,
-                    borderRadius: "50%",
-                    background: hasContact(r.name)
-                      ? "#00695C"
-                      : "#CC3333",
-                    flexShrink: 0,
-                  }}
+                  className={cn(
+                    "h-[9px] w-[9px] shrink-0 rounded-full",
+                    hasContact(r.name) ? "bg-brand-green" : "bg-danger"
+                  )}
                 />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <span
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 600,
-                      color: "#2A2520",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-text-dk">
                     {r.name}
                   </span>
-                  <span style={{ fontSize: 10, color: "#8A8070" }}>
+                  <span className="text-[10px] text-text-lt">
                     {r.sub} · {r.main}
                   </span>
                 </div>
-                <span
-                  style={{
-                    fontSize: 14,
-                    color: "#C4A55A",
-                    flexShrink: 0,
-                  }}
-                >
-                  ›
-                </span>
+                <span className="shrink-0 text-sm text-brand-gold">›</span>
               </div>
             ))}
         </div>
       ) : null}
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div className="flex-1 overflow-y-auto">
         {MAIN.map((m) => {
           const isO = !!exp["p_" + m.key];
           const bi =
@@ -525,47 +297,35 @@ export function MobileTree({
           return (
             <div
               key={m.key}
-              style={{ borderBottom: "2px solid #C4A55A20" }}
+              className="border-b-2 border-b-brand-gold/20"
             >
               <div
                 onClick={() => tog("p_" + m.key)}
-                style={{
-                  display: "flex",
-                  flexDirection: "row",
-                  gap: 10,
-                  alignItems: "center",
-                  padding: "15px 16px",
-                  cursor: "pointer",
-                  background: isO ? `${m.color}08` : "white",
-                }}
+                className={cn(
+                  "flex cursor-pointer flex-row items-center gap-2.5 px-4 py-[15px]",
+                  isO ? "bg-opacity-50" : "bg-brand-white"
+                )}
+                style={
+                  isO
+                    ? { background: `${m.color}14` }
+                    : { background: "white" }
+                }
               >
                 <span
-                  style={{
-                    fontSize: 13,
-                    color: "#C4A55A",
-                    transform: isO ? "rotate(90deg)" : "none",
-                    transition: "transform 0.2s",
-                    display: "inline-block",
-                  }}
+                  className={cn(
+                    "inline-block text-[13px] text-brand-gold transition-transform duration-200",
+                    isO && "rotate-90"
+                  )}
                 >
                   ▶
                 </span>
                 <div
-                  style={{
-                    width: 15,
-                    height: 15,
-                    borderRadius: "50%",
-                    background: m.color,
-                  }}
+                  className="h-[15px] w-[15px] rounded-full"
+                  style={{ background: m.color }}
                 />
                 <span
-                  style={{
-                    flex: 1,
-                    fontSize: 17,
-                    fontWeight: 800,
-                    color: m.color,
-                    fontFamily: "'Cormorant Garamond',serif",
-                  }}
+                  className="flex-1 font-display text-[17px] font-extrabold"
+                  style={{ color: m.color }}
                 >
                   {(m.name || "").replace(/\n/g, " ")}
                 </span>
@@ -595,52 +355,31 @@ export function MobileTree({
                       <div key={si}>
                         <div
                           onClick={() => tog("s_" + sk)}
+                          className="flex cursor-pointer flex-row items-center gap-2 border-t border-brand-gold/6 py-3 pl-8 pr-4"
                           style={{
-                            display: "flex",
-                            flexDirection: "row",
-                            gap: 8,
-                            alignItems: "center",
-                            padding: "12px 16px 12px 32px",
-                            cursor: "pointer",
-                            borderTop: "1px solid #C4A55A0A",
                             background: isS
-                              ? `${s.color || m.color}08`
+                              ? `${s.color || m.color}14`
                               : "transparent",
                           }}
                         >
                           <span
-                            style={{
-                              fontSize: 10,
-                              color: "#C4A55A",
-                              transform: isS
-                                ? "rotate(90deg)"
-                                : "none",
-                              transition: "transform 0.2s",
-                              display: "inline-block",
-                            }}
+                            className={cn(
+                              "inline-block text-[10px] text-brand-gold transition-transform duration-200",
+                              isS && "rotate-90"
+                            )}
                           >
                             ▶
                           </span>
                           <div
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
                             style={{
-                              width: 10,
-                              height: 10,
-                              borderRadius: "50%",
                               background: s.color || m.color,
-                              flexShrink: 0,
                             }}
                           />
-                          <span
-                            style={{
-                              flex: 1,
-                              fontSize: 14,
-                              fontWeight: 700,
-                              color: "#2A2520",
-                            }}
-                          >
+                          <span className="flex-1 text-sm font-bold text-text-dk">
                             {sN}
                           </span>
-                          <span style={{ fontSize: 10, color: "#8A8070" }}>
+                          <span className="text-[10px] text-text-lt">
                             {String(ai.length)}
                           </span>
                         </div>
@@ -652,55 +391,27 @@ export function MobileTree({
                                   onClick={() =>
                                     setViewItem({ name: nm })
                                   }
-                                  style={{
-                                    display: "flex",
-                                    flexDirection: "row",
-                                    gap: 8,
-                                    alignItems: "center",
-                                    padding:
-                                      "11px 16px 11px 52px",
-                                    cursor: "pointer",
-                                    borderTop:
-                                      "1px solid #C4A55A06",
-                                    background:
-                                      selTag &&
+                                  className={cn(
+                                    "flex cursor-pointer flex-row items-center gap-2 border-t border-brand-gold/6 py-[11px] pl-[52px] pr-4",
+                                    selTag &&
                                       resolveTags(nm).includes(
                                         selTag
-                                      )
-                                        ? "#C4A55A14"
-                                        : "transparent",
-                                  }}
+                                      ) &&
+                                      "bg-brand-gold/15"
+                                  )}
                                 >
                                   <div
-                                    style={{
-                                      width: 8,
-                                      height: 8,
-                                      borderRadius: "50%",
-                                      background: hasContact(nm)
-                                        ? "#00695C"
-                                        : "#CC3333",
-                                      flexShrink: 0,
-                                    }}
+                                    className={cn(
+                                      "h-2 w-2 shrink-0 rounded-full",
+                                      hasContact(nm)
+                                        ? "bg-brand-green"
+                                        : "bg-danger"
+                                    )}
                                   />
-                                  <span
-                                    style={{
-                                      flex: 1,
-                                      fontSize: 13,
-                                      fontWeight: 600,
-                                      color: "#2A2520",
-                                      overflow: "hidden",
-                                      textOverflow: "ellipsis",
-                                      whiteSpace: "nowrap",
-                                    }}
-                                  >
+                                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-text-dk">
                                     {nm}
                                   </span>
-                                  <span
-                                    style={{
-                                      fontSize: 13,
-                                      color: "#C4A55A",
-                                    }}
-                                  >
+                                  <span className="text-[13px] text-brand-gold">
                                     ›
                                   </span>
                                 </div>

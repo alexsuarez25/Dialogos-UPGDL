@@ -1,19 +1,6 @@
-/** Brand palette — mirrors `C` in legacy App */
-export interface Palette {
-  gold: string;
-  goldLt: string;
-  goldDk: string;
-  blue: string;
-  blueLt: string;
-  red: string;
-  green: string;
-  greenLt: string;
-  black: string;
-  white: string;
-  bg: string;
-  panelBg: string;
-  pulseRed: string;
-  textDk: string;
-  textMd: string;
-  textLt: string;
-}
+/**
+ * Brand color key shape used across the app. Hex literals are exported as `C` from
+ * `src/lib/designTokens.ts`. Tailwind utilities use the same values via `src/index.css`
+ * `@theme` — keep `designTokens.ts`, `@theme`, and any SVG/catalog-driven colors consistent.
+ */
+export type { PaletteColors as Palette } from "../lib/designTokens";

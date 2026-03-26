@@ -1,16 +1,16 @@
 import { useEffect, useRef } from "react";
-import type { Palette } from "../../../types/palette";
+import { cn } from "../../../lib/cn";
 
 export function RichEditor({
   value,
   onChange,
   placeholder,
-  palette,
+  className,
 }: {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
-  palette: Palette;
+  className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const exec = (cmd: string) => {
@@ -22,33 +22,16 @@ export function RichEditor({
       ref.current.innerHTML = value;
     }
   }, [value]);
-  const C = palette;
+  const toolBtn =
+    "flex h-[26px] w-7 cursor-pointer items-center justify-center rounded-[5px] border border-brand-gold/30 bg-brand-white text-[13px] text-text-dk";
+
   return (
-    <div>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "row",
-          gap: 2,
-          marginBottom: 6,
-          borderBottom: `1px solid ${C.gold}20`,
-          paddingBottom: 6,
-        }}
-      >
+    <div className={cn(className)}>
+      <div className="mb-1.5 flex flex-row gap-0.5 border-b border-brand-gold/20 pb-1.5">
         <button
           type="button"
           onClick={() => exec("bold")}
-          style={{
-            width: 28,
-            height: 26,
-            border: `1px solid ${C.gold}30`,
-            borderRadius: 5,
-            background: C.white,
-            cursor: "pointer",
-            fontWeight: 900,
-            fontSize: 13,
-            color: C.textDk,
-          }}
+          className={cn(toolBtn, "font-black")}
           title="Negritas"
         >
           B
@@ -56,17 +39,7 @@ export function RichEditor({
         <button
           type="button"
           onClick={() => exec("italic")}
-          style={{
-            width: 28,
-            height: 26,
-            border: `1px solid ${C.gold}30`,
-            borderRadius: 5,
-            background: C.white,
-            cursor: "pointer",
-            fontStyle: "italic",
-            fontSize: 13,
-            color: C.textDk,
-          }}
+          className={cn(toolBtn, "italic")}
           title="Itálicas"
         >
           I
@@ -74,17 +47,7 @@ export function RichEditor({
         <button
           type="button"
           onClick={() => exec("underline")}
-          style={{
-            width: 28,
-            height: 26,
-            border: `1px solid ${C.gold}30`,
-            borderRadius: 5,
-            background: C.white,
-            cursor: "pointer",
-            textDecoration: "underline",
-            fontSize: 13,
-            color: C.textDk,
-          }}
+          className={cn(toolBtn, "underline")}
           title="Subrayado"
         >
           U
@@ -96,20 +59,7 @@ export function RichEditor({
         suppressContentEditableWarning
         onInput={(e) => onChange(e.currentTarget.innerHTML)}
         data-placeholder={placeholder || ""}
-        style={{
-          minHeight: 70,
-          padding: "10px 12px",
-          fontSize: 13,
-          border: `1px solid ${C.gold}30`,
-          borderRadius: 8,
-          outline: "none",
-          color: C.textDk,
-          background: `${C.gold}06`,
-          lineHeight: 1.6,
-          fontFamily: "'Source Sans 3',sans-serif",
-          overflowY: "auto",
-          maxHeight: 140,
-        }}
+        className="max-h-[140px] min-h-[70px] overflow-y-auto rounded-lg border border-brand-gold/30 bg-brand-gold/6 px-3 py-2.5 font-sans text-[13px] leading-relaxed text-text-dk outline-none"
       />
     </div>
   );

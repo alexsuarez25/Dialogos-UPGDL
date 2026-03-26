@@ -7,6 +7,7 @@ import {
   appendContactoForParent,
   updateContacto,
   deleteContacto,
+  setPrimaryContactForParent,
 } from "../../../lib/firebase/contactosRealtime";
 import ContactosFirebasePanel from "./ContactosFirebasePanel";
 import TagMapFirebasePanel from "./TagMapFirebasePanel";
@@ -39,9 +40,15 @@ import {
   normalizeCustomNietos,
   customNietosForChildKey,
 } from "../../../lib/firebase/mapCustomNodesRealtime";
-import { LOGO, C, CENTRAL, CT } from "../../../lib/mapStatic";
+import { C } from "../../../lib/designTokens";
+import { LOGO, CENTRAL, CT } from "../../../lib/mapStatic";
 import { tagMapLive, getTags } from "../../../lib/tagMapStore";
-import { fbContactosRef, mergeItemPopContacts, resolveGc } from "../../../lib/contactHelpers";
+import {
+  fbContactosRef,
+  mergeItemPopContacts,
+  resolveGc,
+  displayPrimaryContactLabel,
+} from "../../../lib/contactHelpers";
 import { smartSearch } from "../../../lib/mapSearch";
 import {
   pol,
@@ -72,6 +79,7 @@ import { CentralPanel } from "./CentralPanel";
 import { ItemPopover } from "./ItemPopover";
 import { MobileTree } from "./MobileTree";
 import { NodesAdminPanel } from "./NodesAdminPanel";
+import { cn } from "../../../lib/cn";
 
 function mergedTemaPositions(
   proj: CatalogProject,
@@ -219,6 +227,7 @@ export default function Dashboard() {
                 cargo: o.cargo != null ? String(o.cargo) : "",
                 email: o.email != null ? String(o.email) : "",
                 notas: o.notas != null ? String(o.notas) : "",
+                primary: o.primary === true,
               };
             });
         fbContactosRef.current = list;
@@ -494,73 +503,139 @@ export default function Dashboard() {
       console.error(e);
     }
   }, []);
-  const addContact = useCallback(async (key, c) => {
-    const name = String(c.name || "").trim();
-    if (!name) return;
-    const row = {
-      name,
-      cargo: String(c.cargo || "").trim(),
-      email: String(c.email || "").trim(),
-    };
-    try {
-      await appendContactoForParent(key, row);
-    } catch (e) {
-      console.error("RTDB append contacto:", e);
-      const pending = Array.isArray(contacts[key]) ? [...contacts[key]] : [];
-      await saveContacts({ ...contacts, [key]: [...pending, row] });
-    }
-  }, [contacts, saveContacts]);
-  const editContact = useCallback(async (key, idx, c) => {
-    const merged = mergeItemPopContacts(key, contacts, fbContactos);
-    const target = merged[idx];
-    if (!target) return;
-    const nextRow = {
-      name: String(c.name || "").trim(),
-      cargo: String(c.cargo || "").trim(),
-      email: String(c.email || "").trim(),
-    };
-    if (!nextRow.name) return;
-    if (target.fbId) {
+  const addContact = useCallback(
+    async (key, c) => {
+      const name = String(c.name || "").trim();
+      if (!name) return;
+      const merged = mergeItemPopContacts(key, contacts, fbContactos);
+      const hasPrimary = merged.some((x) => x.isPrimary);
+      const isPrimary =
+        c.isPrimary === true || (c.isPrimary !== false && !hasPrimary);
+      const row = {
+        name,
+        cargo: String(c.cargo || "").trim(),
+        email: String(c.email || "").trim(),
+        isPrimary,
+      };
       try {
-        await updateContacto(String(target.fbId), {
-          nombre: nextRow.name,
-          cargo: nextRow.cargo,
-          email: nextRow.email,
-          updatedAt: Date.now(),
+        await appendContactoForParent(key, {
+          name: row.name,
+          cargo: row.cargo,
+          email: row.email,
+          primary: isPrimary,
         });
       } catch (e) {
-        console.error("RTDB update contacto:", e);
+        console.error("RTDB append contacto:", e);
+        const pending = Array.isArray(contacts[key]) ? [...contacts[key]] : [];
+        const cleared = pending.map((p) => ({ ...p, isPrimary: false }));
+        await saveContacts({
+          ...contacts,
+          [key]: [...cleared, row],
+        });
       }
-    } else {
-      try {
-        await appendContactoForParent(key, nextRow);
-        const list = Array.isArray(contacts[key]) ? [...contacts[key]] : [];
-        const j = list.findIndex(
-          (x) => !x.fbId
-            && x.name === target.name
-            && (x.email || "") === (target.email || "")
-            && (x.cargo || "") === (target.cargo || "")
-        );
-        if (j >= 0) {
-          list.splice(j, 1);
-          await saveContacts({ ...contacts, [key]: list });
+    },
+    [contacts, fbContactos, saveContacts]
+  );
+  const editContact = useCallback(
+    async (key, idx, c) => {
+      const merged = mergeItemPopContacts(key, contacts, fbContactos);
+      const target = merged[idx];
+      if (!target) return;
+      const wantPrimary = c.isPrimary === true;
+      const nextRow = {
+        name: String(c.name || "").trim(),
+        cargo: String(c.cargo || "").trim(),
+        email: String(c.email || "").trim(),
+        isPrimary: wantPrimary,
+      };
+      if (!nextRow.name) return;
+      if (target.fbId) {
+        try {
+          await updateContacto(String(target.fbId), {
+            nombre: nextRow.name,
+            cargo: nextRow.cargo,
+            email: nextRow.email,
+            updatedAt: Date.now(),
+          });
+          if (wantPrimary) {
+            await setPrimaryContactForParent(key, String(target.fbId));
+          } else if (target.isPrimary) {
+            await updateContacto(String(target.fbId), {
+              primary: false,
+              updatedAt: Date.now(),
+            });
+          }
+        } catch (e) {
+          console.error("RTDB update contacto:", e);
         }
-      } catch (e) {
-        console.error("RTDB append contacto (edit):", e);
-        const list = Array.isArray(contacts[key]) ? [...contacts[key]] : [];
-        const j = list.findIndex(
-          (x) => !x.fbId
-            && x.name === target.name
-            && (x.email || "") === (target.email || "")
-            && (x.cargo || "") === (target.cargo || "")
-        );
-        if (j >= 0) {
-          list[j] = nextRow;
-          await saveContacts({ ...contacts, [key]: list });
+      } else {
+        try {
+          await appendContactoForParent(key, {
+            name: nextRow.name,
+            cargo: nextRow.cargo,
+            email: nextRow.email,
+            primary: wantPrimary,
+          });
+          const list = Array.isArray(contacts[key]) ? [...contacts[key]] : [];
+          const j = list.findIndex(
+            (x) =>
+              !x.fbId &&
+              x.name === target.name &&
+              (x.email || "") === (target.email || "") &&
+              (x.cargo || "") === (target.cargo || "")
+          );
+          if (j >= 0) {
+            list.splice(j, 1);
+            await saveContacts({ ...contacts, [key]: list });
+          }
+        } catch (e) {
+          console.error("RTDB append contacto (edit):", e);
+          const list = Array.isArray(contacts[key]) ? [...contacts[key]] : [];
+          const j = list.findIndex(
+            (x) =>
+              !x.fbId &&
+              x.name === target.name &&
+              (x.email || "") === (target.email || "") &&
+              (x.cargo || "") === (target.cargo || "")
+          );
+          if (j >= 0) {
+            const next = list.map((row, ii) => {
+              if (ii !== j) return { ...row, isPrimary: false };
+              return { ...nextRow, isPrimary: wantPrimary };
+            });
+            await saveContacts({ ...contacts, [key]: next });
+          }
         }
       }
-    }
-  }, [contacts, fbContactos, saveContacts]);
+    },
+    [contacts, fbContactos, saveContacts]
+  );
+  const setPrimaryContact = useCallback(
+    async (key: string, idx: number) => {
+      const merged = mergeItemPopContacts(key, contacts, fbContactos);
+      const target = merged[idx];
+      if (!target) return;
+      if (target.fbId) {
+        try {
+          await setPrimaryContactForParent(key, String(target.fbId));
+        } catch (e) {
+          console.error("RTDB primary contacto:", e);
+        }
+      } else {
+        const list = Array.isArray(contacts[key]) ? contacts[key] : [];
+        const next = list.map((row) => {
+          if (row.fbId) return row;
+          const same =
+            row.name === target.name &&
+            (row.email || "") === (target.email || "") &&
+            (row.cargo || "") === (target.cargo || "");
+          return { ...row, isPrimary: same };
+        });
+        await saveContacts({ ...contacts, [key]: next });
+      }
+    },
+    [contacts, fbContactos, saveContacts]
+  );
   const delContact = useCallback(async (key, idx) => {
     const merged = mergeItemPopContacts(key, contacts, fbContactos);
     const target = merged[idx];
@@ -624,7 +699,7 @@ export default function Dashboard() {
 
   if (!layout) {
     return (
-      <div style={{ fontFamily: "'Source Sans 3','Segoe UI',sans-serif", background: C.bg, width: "100%", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: C.textDk, fontSize: 16 }}>
+      <div className="flex h-screen w-full items-center justify-center bg-surface-bg font-sans text-base text-text-dk">
         Cargando mapa…
       </div>
     );
@@ -663,25 +738,19 @@ export default function Dashboard() {
   }
 
   return (
-    <div style={{ fontFamily: "'Source Sans 3','Segoe UI',sans-serif", background: C.bg, width: "100%", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", WebkitFontSmoothing: "antialiased" }}>
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700;800;900&family=Cormorant+Garamond:wght@400;600;700;800&display=swap" />
-      <style>{`@keyframes redPulse{0%,100%{opacity:0.6;transform:scale(1)}50%{opacity:0.15;transform:scale(1.2)}}
-        @keyframes slI{from{transform:translateX(100%)}to{transform:translateX(0)}}
-        @keyframes pU{from{opacity:0;transform:scale(0.94) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
-        svg text{text-rendering:optimizeLegibility}`}</style>
-
+    <div className="relative flex h-screen w-full flex-col overflow-hidden bg-surface-bg font-sans antialiased">
       {/* HEADER */}
-      <div style={{ background: C.white, padding: "8px 22px", display: "flex", alignItems: "center", gap: 12, flexShrink: 0, borderBottom: `1px solid ${C.gold}25`, zIndex: 40 }}>
-        <div onClick={e => { e.stopPropagation(); sM ? goHome() : setCPanel(p => !p); }} style={{ width: 34, height: 34, borderRadius: "50%", cursor: "pointer", background: C.gold, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <span style={{ fontSize: 12, fontWeight: 900, color: C.white, fontFamily: "Impact,sans-serif" }}>UP</span></div>
-        <div><div style={{ fontSize: 14, fontWeight: 800, color: C.textDk, fontFamily: "'Cormorant Garamond',serif" }}>Diálogos con el Entorno</div>
-          <div style={{ fontSize: 9.5, color: C.textLt }}>Universidad Panamericana Guadalajara</div></div>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
-          <span style={{ color: !sM ? C.gold : C.textLt, cursor: "pointer", fontWeight: !sM ? 700 : 400 }} onClick={e => { e.stopPropagation(); goHome(); }}>Inicio</span>
-          {sM && <><span style={{ color: C.gold + "60" }}>›</span><span style={{ color: sM.color, fontWeight: 700, cursor: "pointer" }} onClick={e => { e.stopPropagation(); goMain(sM); }}>{sM.name.split("\n")[0]}</span></>}
-          {sProj && <><span style={{ color: C.gold + "60" }}>›</span><span style={{ color: sProj.color, fontWeight: 700 }}>{sProj.short}</span></>}
-          {sSub && <><span style={{ color: C.gold + "60" }}>›</span><span style={{ color: sSub.color, fontWeight: 700 }}>{sSub.name.split("\n")[0]}</span></>}
-          {sTema && <><span style={{ color: C.gold + "60" }}>›</span><span style={{ fontWeight: 700, color: C.textDk }}>{sTema.name.split("\n")[0]}</span></>}
+      <div className="z-40 flex shrink-0 items-center gap-3 border-b border-brand-gold/25 bg-brand-white px-[22px] py-2">
+        <div onClick={e => { e.stopPropagation(); sM ? goHome() : setCPanel(p => !p); }} className="flex h-[34px] w-[34px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-brand-gold">
+          <span className="font-impact text-xs font-black text-brand-white">UP</span></div>
+        <div><div className="font-display text-sm font-extrabold text-text-dk">Diálogos con el Entorno</div>
+          <div className="text-[9.5px] text-text-lt">Universidad Panamericana Guadalajara</div></div>
+        <div className="ml-auto flex items-center gap-1.5 text-[11px]">
+          <span className={cn("cursor-pointer", !sM ? "font-bold text-brand-gold" : "font-normal text-text-lt")} onClick={e => { e.stopPropagation(); goHome(); }}>Inicio</span>
+          {sM && <><span className="text-brand-gold/60">›</span><span className="cursor-pointer font-bold" style={{ color: sM.color }} onClick={e => { e.stopPropagation(); goMain(sM); }}>{sM.name.split("\n")[0]}</span></>}
+          {sProj && <><span className="text-brand-gold/60">›</span><span className="font-bold" style={{ color: sProj.color }}>{sProj.short}</span></>}
+          {sSub && <><span className="text-brand-gold/60">›</span><span className="font-bold" style={{ color: sSub.color }}>{sSub.name.split("\n")[0]}</span></>}
+          {sTema && <><span className="text-brand-gold/60">›</span><span className="font-bold text-text-dk">{sTema.name.split("\n")[0]}</span></>}
         </div>
         <button type="button" onClick={e => {
           e.stopPropagation();
@@ -689,10 +758,10 @@ export default function Dashboard() {
             const n = !a; if (n) { setShowContactosFb(false); setShowTagMapFb(false); } return n;
           });
         }}
-          style={{
-            fontSize: 10, padding: "6px 14px", background: showAdmin ? C.gold : C.gold + "15", border: `1px solid ${C.gold}30`,
-            borderRadius: 8, cursor: "pointer", color: showAdmin ? C.white : C.gold, fontWeight: 700, marginLeft: 8, flexShrink: 0
-          }}>
+          className={cn(
+            "ml-2 shrink-0 cursor-pointer rounded-lg border border-brand-gold/30 px-3.5 py-1.5 text-[10px] font-bold",
+            showAdmin ? "bg-brand-gold text-brand-white" : "bg-brand-gold/15 text-brand-gold"
+          )}>
           ⚙ Nodos</button>
         {/* <button type="button" onClick={e => {
           e.stopPropagation();
@@ -718,14 +787,13 @@ export default function Dashboard() {
           🏷 Etiquetas</button> */}
       </div>
 
-      <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+      <div className="relative flex-1 overflow-hidden">
         {/* ADMIN */}
         {showContactosFb && (
           <ContactosFirebasePanel
             open={showContactosFb}
             onClose={() => setShowContactosFb(false)}
             records={fbContactos.filter((r) => !r.parentKey)}
-            palette={C}
           />
         )}
         {showTagMapFb && (
@@ -734,14 +802,12 @@ export default function Dashboard() {
             onClose={() => setShowTagMapFb(false)}
             tagMap={tagMapUi}
             usingFallback={tagMapRemoteEmpty}
-            palette={C}
           />
         )}
         {showAdmin && (
           <NodesAdminPanel
             open={showAdmin}
             onClose={() => setShowAdmin(false)}
-            palette={C}
             treeCatalog={{ MAIN, PROJECTS, CINOV_SUBS, ALIADOS_SUBS, INVEST_SUBS }}
             cNietos={cNietos}
             deletedNodes={deletedNodes}
@@ -757,88 +823,74 @@ export default function Dashboard() {
 
         {/* MENU */}
         {sM && !panel && !cPanel && (
-          <div style={{ position: "absolute", top: 60, left: 14, width: 260, maxHeight: "calc(100% - 80px)", zIndex: 25, background: C.white + "f0", borderRadius: 14, border: `1px solid ${C.gold}25`, boxShadow: "0 4px 20px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <div style={{ padding: "14px 18px 10px", borderBottom: `1px solid ${C.gold}15` }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: sM.color, textTransform: "uppercase", letterSpacing: "1.5px" }}>{sM.name.split("\n")[0]}</div></div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "4px 0" }}>
+          <div className="absolute left-3.5 top-[60px] z-25 flex max-h-[calc(100%-80px)] w-[260px] flex-col overflow-hidden rounded-[14px] border border-brand-gold/25 bg-brand-white/95 shadow-card">
+            <div className="border-b border-brand-gold/15 px-[18px] pb-2.5 pt-3.5">
+              <div className="text-[13px] font-extrabold uppercase tracking-wide" style={{ color: sM.color }}>{sM.name.split("\n")[0]}</div></div>
+            <div className="flex-1 overflow-y-auto py-1">
               {sM.key === "proyectos" && pN.map((p, i) => (<div key={i} onClick={e => { e.stopPropagation(); goProj(p); }}
-                style={{ padding: "10px 18px", cursor: "pointer", borderBottom: `1px solid ${C.gold}08` }}
-                onMouseEnter={e => e.currentTarget.style.background = C.gold + "10"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: C.textDk }}>{p.short}</span></div>))}
+                className="cursor-pointer border-b border-brand-gold/8 px-[18px] py-2.5 hover:bg-brand-gold/10">
+                <span className="text-[13px] font-bold text-text-dk">{p.short}</span></div>))}
               {["cinov", "aliados", "investigacion"].includes(sM.key) && (sM.key === "cinov" ? cS : sM.key === "aliados" ? aS : iSub).map((s, i) => (<div key={i}
                 onClick={e => { e.stopPropagation(); goSub(s); }}
-                style={{ padding: "10px 18px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${C.gold}08` }}
-                onMouseEnter={e => e.currentTarget.style.background = C.gold + "10"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: C.textDk }}>{s.name.split("\n")[0]}</span>{s.listMode && <span style={{ fontSize: 9, color: C.gold, marginLeft: 6, fontWeight: 700 }}>📋 Lista</span>}</div>))}
+                className="flex cursor-pointer items-center gap-2.5 border-b border-brand-gold/8 px-[18px] py-2.5 hover:bg-brand-gold/10">
+                <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: s.color }} />
+                <span className="text-[13px] font-bold text-text-dk">{s.name.split("\n")[0]}</span>{s.listMode && <span className="ml-1.5 text-[9px] font-bold text-brand-gold">📋 Lista</span>}</div>))}
             </div>
           </div>)}
 
 
         {/* SEARCH + VOLVER — stacked top-right */}
-        <div style={{ position: "absolute", top: 14, right: 14, zIndex: 26, display: isMob ? "none" : "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+        <div className={cn("absolute right-3.5 top-3.5 z-26 flex flex-col items-end gap-2", isMob && "hidden")}>
           {/* SMART SEARCH */}
-          <div style={{ position: "relative", width: 420 }}>
-            {/* Input + mode toggle */}
-            <div style={{
-              display: "flex", background: C.white, border: `2px solid ${(searchText || searchTag) ? C.gold : C.gold + "60"}`,
-              borderRadius: 12, boxShadow: "0 3px 14px rgba(0,0,0,0.07)", overflow: "hidden"
-            }}>
-              <div style={{ display: "flex", alignItems: "center", padding: "0 14px", fontSize: 20 }}>🔍</div>
+          <div className="relative w-[420px]">
+            <div
+              className={cn(
+                "flex overflow-hidden rounded-xl bg-brand-white shadow-search",
+                (searchText || searchTag) ? "border-2 border-brand-gold" : "border-2 border-brand-gold/60"
+              )}
+              style={{ boxShadow: "0 3px 14px rgba(0,0,0,0.07)" }}
+            >
+              <div className="flex items-center px-3.5 text-xl">🔍</div>
               {searchMode === "text" ? (
                 <input value={searchText} onChange={e => { setSearchText(e.target.value); setSearchTag(null); }}
                   placeholder="Buscar actor, tema o institución..."
-                  style={{
-                    flex: 1, border: "none", outline: "none", fontSize: 15, fontWeight: 600,
-                    padding: "12px 0", color: C.textDk, background: "transparent",
-                    fontFamily: "'Source Sans 3',sans-serif"
-                  }} />
+                  className="min-w-0 flex-1 border-none bg-transparent py-3 font-sans text-[15px] font-semibold text-text-dk outline-none" />
               ) : (
                 <button type="button" onClick={() => setSearchOpen(o => !o)}
-                  style={{
-                    flex: 1, border: "none", background: "transparent", textAlign: "left",
-                    padding: "12px 0", cursor: "pointer", fontSize: 15, fontWeight: 600,
-                    color: searchTag ? C.gold : C.textMd, fontFamily: "'Source Sans 3',sans-serif"
-                  }}>
+                  className={cn(
+                    "flex-1 cursor-pointer border-none bg-transparent py-3 text-left font-sans text-[15px] font-semibold",
+                    searchTag ? "text-brand-gold" : "text-text-md"
+                  )}>
                   {searchTag || "Seleccionar temática..."}</button>
               )}
               {(searchText || searchTag) && <button type="button" onClick={() => { setSearchText(''); setSearchTag(null); }}
-                style={{
-                  border: "none", background: "transparent", padding: "0 14px", fontSize: 16,
-                  color: C.textLt, cursor: "pointer", fontWeight: 700
-                }}>✕</button>}
-              {/* Mode toggle */}
-              <div style={{ display: "flex", borderLeft: `1px solid ${C.gold}20` }}>
+                className="cursor-pointer border-none bg-transparent px-3.5 text-base font-bold text-text-lt">✕</button>}
+              <div className="flex border-l border-brand-gold/20">
                 <button type="button" onClick={() => { setSearchMode("text"); setSearchTag(null); setSearchOpen(false); }}
-                  style={{
-                    border: "none", padding: "8px 12px", cursor: "pointer", fontSize: 10, fontWeight: 700,
-                    background: searchMode === "text" ? C.gold + "15" : "transparent", color: searchMode === "text" ? C.gold : C.textLt
-                  }}>
+                  className={cn(
+                    "cursor-pointer border-none px-3 py-2 text-[10px] font-bold",
+                    searchMode === "text" ? "bg-brand-gold/15 text-brand-gold" : "bg-transparent text-text-lt"
+                  )}>
                   Texto</button>
                 <button type="button" onClick={() => { setSearchMode("tag"); setSearchText(''); }}
-                  style={{
-                    border: "none", padding: "8px 12px", cursor: "pointer", fontSize: 10, fontWeight: 700,
-                    background: searchMode === "tag" ? C.gold + "15" : "transparent", color: searchMode === "tag" ? C.gold : C.textLt
-                  }}>
+                  className={cn(
+                    "cursor-pointer border-none px-3 py-2 text-[10px] font-bold",
+                    searchMode === "tag" ? "bg-brand-gold/15 text-brand-gold" : "bg-transparent text-text-lt"
+                  )}>
                   Temática</button>
               </div>
             </div>
-            {/* Tag dropdown */}
             {searchMode === "tag" && searchOpen && (
-              <div style={{
-                position: "absolute", top: "100%", right: 0, marginTop: 6, width: 420, maxHeight: 400,
-                background: C.white, border: `1px solid ${C.gold}30`, borderRadius: 14,
-                boxShadow: "0 10px 40px rgba(0,0,0,0.12)", overflowY: "auto", zIndex: 30
-              }}>
+              <div
+                className="absolute right-0 z-30 mt-1.5 max-h-[400px] w-[420px] overflow-y-auto rounded-2xl border border-brand-gold/30 bg-brand-white"
+                style={{ boxShadow: "0 10px 40px rgba(0,0,0,0.12)" }}
+              >
                 {TAGS.slice().sort((a, b) => a.localeCompare(b, 'es')).map((tag, i) => (
                   <div key={i} onClick={e => { e.stopPropagation(); setSearchTag(tag); setSearchOpen(false); }}
-                    style={{
-                      padding: "11px 20px", cursor: "pointer", borderBottom: `1px solid ${C.gold}08`,
-                      fontSize: 14, fontWeight: 600, color: C.textDk,
-                      background: searchTag === tag ? C.gold + "15" : "transparent"
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = C.gold + "10"}
-                    onMouseLeave={e => e.currentTarget.style.background = searchTag === tag ? C.gold + "15" : "transparent"}>
+                    className={cn(
+                      "cursor-pointer border-b border-brand-gold/8 px-5 py-[11px] text-sm font-semibold text-text-dk hover:bg-brand-gold/10",
+                      searchTag === tag && "bg-brand-gold/15"
+                    )}>
                     {tag}</div>))}
               </div>
             )}
@@ -992,65 +1044,46 @@ export default function Dashboard() {
                 } catch (e) { console.error("doZoom error:", e); }
               };
               return (
-                <div style={{
-                  width: 420, maxHeight: 420, background: C.white, border: `1px solid ${C.gold}25`,
-                  borderRadius: 14, boxShadow: "0 6px 30px rgba(0,0,0,0.1)", overflowY: "auto", display: "flex", flexDirection: "column"
-                }}>
-                  {/* Related tags header */}
+                <div
+                  className="flex max-h-[420px] w-[420px] flex-col overflow-y-auto rounded-2xl border border-brand-gold/25 bg-brand-white"
+                  style={{ boxShadow: "0 6px 30px rgba(0,0,0,0.1)" }}
+                >
                   {relatedTags.length > 0 && (
-                    <div style={{
-                      padding: "12px 18px", borderBottom: `1px solid ${C.gold}15`, flexShrink: 0,
-                      position: "sticky", top: 0, background: C.white, zIndex: 1
-                    }}>
-                      <div style={{
-                        fontSize: 10, fontWeight: 800, color: C.gold, textTransform: "uppercase",
-                        letterSpacing: "1px", marginBottom: 6
-                      }}>
+                    <div className="sticky top-0 z-1 shrink-0 border-b border-brand-gold/15 bg-brand-white px-[18px] py-3">
+                      <div className="mb-1.5 text-[10px] font-extrabold uppercase tracking-wide text-brand-gold">
                         {searchText ? "¿De qué puedes hablar?" : "Temática"} · {resultNodes.length} resultados</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      <div className="flex flex-wrap gap-1">
                         {relatedTags.slice(0, 6).map((t, i) => (
-                          <span key={i} style={{
-                            fontSize: 9, fontWeight: 700, color: C.gold, background: C.gold + "12",
-                            border: `1px solid ${C.gold}20`, borderRadius: 10, padding: "2px 8px"
-                          }}>
+                          <span key={i} className="rounded-[10px] border border-brand-gold/20 bg-brand-gold/15 px-2 py-0.5 text-[9px] font-bold text-brand-gold">
                             {t}</span>))}
                       </div>
                     </div>
                   )}
-                  {/* Node results */}
-                  <div style={{ flex: 1, overflowY: "auto" }}>
+                  <div className="min-h-0 flex-1 overflow-y-auto">
                     {resultNodes.map((n, i) => {
-                      const tc = typeColors[n.type] || C.textLt; const ct = gc(n.name);
+                      const tc = typeColors[n.type] || C.textLt;
                       return (
                         <div key={i} onClick={e => { e.stopPropagation(); doZoom(n, n.name); }}
-                          style={{
-                            padding: "10px 18px", cursor: "pointer", borderBottom: `1px solid ${C.gold}06`,
-                            display: "flex", alignItems: "center", gap: 8
-                          }}
-                          onMouseEnter={e => e.currentTarget.style.background = C.gold + "10"}
-                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                          <span style={{
-                            fontSize: 8, fontWeight: 800, color: tc, background: tc + "14",
-                            border: `1px solid ${tc}30`, borderRadius: 5, padding: "2px 7px",
-                            textTransform: "uppercase", letterSpacing: "0.3px", flexShrink: 0,
-                            whiteSpace: "nowrap"
+                          className="flex cursor-pointer items-center gap-2 border-b border-brand-gold/6 px-[18px] py-2.5 hover:bg-brand-gold/10">
+                          <span className="shrink-0 whitespace-nowrap rounded-[5px] border px-[7px] py-0.5 text-[8px] font-extrabold uppercase tracking-wide"
+                            style={{
+                            color: tc,
+                            background: `${tc}24`,
+                            borderColor: `${tc}4d`,
                           }}>{n.type}</span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{
-                              fontSize: 13, fontWeight: 700, color: C.textDk, overflow: "hidden",
-                              textOverflow: "ellipsis", whiteSpace: "nowrap"
-                            }}>{n.name}</div>
-                            <div style={{ fontSize: 10, color: C.textLt, marginTop: 1 }}>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[13px] font-bold text-text-dk">{n.name}</div>
+                            <div className="mt-px text-[10px] text-text-lt">
                               {n.parent || ""}{n.matchType === "direct" ? " · coincidencia directa" : ""}</div>
                           </div>
                           {(() => {
                             try {
                               const hc = hasContact(n.name); return hc
-                                ? <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.green, flexShrink: 0 }} title="Con contacto" />
-                                : <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.pulseRed, flexShrink: 0 }} title="Sin contacto" />;
+                                ? <span className="h-2 w-2 shrink-0 rounded-full bg-brand-green" title="Con contacto" />
+                                : <span className="h-2 w-2 shrink-0 rounded-full bg-danger" title="Sin contacto" />;
                             } catch (e) { return null; }
                           })()}
-                          <span style={{ fontSize: 16, color: C.gold, flexShrink: 0 }}>›</span>
+                          <span className="shrink-0 text-base text-brand-gold">›</span>
                         </div>
                       );
                     })}
@@ -1062,21 +1095,19 @@ export default function Dashboard() {
           {/* VOLVER */}
           {(sM || cPanel) && (
             <button type="button" onClick={e => { e.stopPropagation(); cPanel ? setCPanel(false) : goBack(); }}
-              style={{
-                background: C.white, border: `1.5px solid ${C.gold}50`, borderRadius: 10,
-                padding: "10px 24px", cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
-                display: "flex", alignItems: "center", gap: 8
-              }}>
-              <span style={{ fontSize: 20, color: C.gold }}>←</span>
-              <span style={{ fontSize: 18, fontWeight: 900, color: C.textDk }}>Volver</span>
+              className="flex cursor-pointer items-center gap-2 rounded-[10px] border-[1.5px] border-brand-gold/50 bg-brand-white px-6 py-2.5"
+              style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+              <span className="text-xl text-brand-gold">←</span>
+              <span className="text-lg font-black text-text-dk">Volver</span>
             </button>
           )}
         </div>
 
-        <div ref={svgR} style={{ position: "absolute", inset: 0, cursor: dr.current.a ? "grabbing" : "grab" }}
+        <div ref={svgR} className="absolute inset-0 cursor-grab active:cursor-grabbing"
           onClick={e => { if (!dr.current.m) cBg(); }} onMouseDown={onD} onMouseMove={onM2} onMouseUp={onU} onMouseLeave={onU}>
           <svg viewBox={vS} preserveAspectRatio="xMidYMid meet"
-            style={{ width: "100%", height: "100%", display: "block", userSelect: "none", imageRendering: "optimizeQuality" }}
+            className="block h-full w-full select-none"
+            style={{ imageRendering: "optimizeQuality" }}
             textRendering="optimizeLegibility" shapeRendering="geometricPrecision">
             <defs><radialGradient id="bgR" cx="50%" cy="50%" r="55%"><stop offset="0%" stopColor="#F5F2EB" /><stop offset="100%" stopColor="#EBE6DA" /></radialGradient></defs>
             <rect x="0" y="0" width={WW} height={HH} fill="url(#bgR)" />
@@ -1195,114 +1226,99 @@ export default function Dashboard() {
           </svg>
         </div>
 
-        {panel && sProj && <CentralPanel data={sProj.desc} accent={sProj.color} onClose={() => setPanel(false)} isCentral={false} resolveTags={(t) => getTags(t)} palette={C} />}
+        {panel && sProj && <CentralPanel data={sProj.desc} accent={sProj.color} onClose={() => setPanel(false)} isCentral={false} resolveTags={(t) => getTags(t)} />}
         {/* GENERIC LIST PANEL — for any listMode sub */}
         {panel && sSub?.listMode && (
-          <div style={{
-            position: "absolute", top: 0, right: 0, width: 450, height: "100%", zIndex: 30,
-            background: C.panelBg, borderLeft: `2px solid ${sSub.color}40`, boxShadow: "-6px 0 36px rgba(0,0,0,0.08)",
-            display: "flex", flexDirection: "column", animation: "slI 0.45s cubic-bezier(0.22,1,0.36,1)"
-          }}>
-            <div style={{
-              padding: "22px 24px 16px", borderBottom: `1px solid ${C.gold}25`, flexShrink: 0,
-              display: "flex", justifyContent: "space-between", alignItems: "flex-start"
-            }}>
-              <div style={{ flex: 1, paddingRight: 12 }}>
-                <div style={{
-                  fontSize: 10, color: sSub.color, fontWeight: 700, textTransform: "uppercase",
-                  letterSpacing: "1.5px", marginBottom: 6
-                }}>{sM?.name?.split("\n")[0] || ""}</div>
-                <div style={{
-                  fontSize: 22, fontWeight: 900, color: C.textDk, lineHeight: 1.3,
-                  fontFamily: "'Cormorant Garamond',serif"
-                }}>{sSub.name.split("\n").join(" ")}</div>
-                <div style={{ fontSize: 12, color: C.textLt, marginTop: 4 }}>{sSub.items.length} elementos</div>
+          <div
+            className="animate-[slI_0.45s_cubic-bezier(0.22,1,0.36,1)] absolute right-0 top-0 z-30 flex h-full w-[450px] flex-col border-l-2 bg-surface-panel"
+            style={{
+              borderLeftColor: `${sSub.color}66`,
+              boxShadow: "-6px 0 36px rgba(0,0,0,0.08)",
+            }}
+          >
+            <div className="flex shrink-0 items-start justify-between border-b border-brand-gold/25 px-6 pb-4 pt-[22px]">
+              <div className="min-w-0 flex-1 pr-3">
+                <div
+                  className="mb-1.5 text-[10px] font-bold uppercase tracking-wide"
+                  style={{ color: sSub.color }}
+                >{sM?.name?.split("\n")[0] || ""}</div>
+                <div className="font-display text-[22px] font-black leading-snug text-text-dk">{sSub.name.split("\n").join(" ")}</div>
+                <div className="mt-1 text-xs text-text-lt">{sSub.items.length} elementos</div>
               </div>
-              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <div className="flex shrink-0 gap-1.5">
                 <button type="button" onClick={e => { e.stopPropagation(); if (sSub) { openItem({ name: (sSub.name || '').replace(/\n/g, ' '), _level: 'hijo', _mainKey: sM?.key || null }); } }}
-                  style={{
-                    background: "transparent", border: `1px solid ${C.gold}40`, color: C.gold,
-                    borderRadius: 8, width: 32, height: 32, fontSize: 13, cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center"
-                  }}>ⓘ</button>
+                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-brand-gold/40 bg-transparent text-[13px] text-brand-gold">ⓘ</button>
                 <button type="button" onClick={() => { setPanel(false); setSSub(null); if (sM) goMain(sM); }}
-                  style={{
-                    background: "transparent", border: `1px solid ${C.gold}40`, color: C.textLt,
-                    borderRadius: 8, width: 32, height: 32, fontSize: 15, cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center"
-                  }}> ✕</button>
+                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-brand-gold/40 bg-transparent text-[15px] text-text-lt"> ✕</button>
               </div>
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+            <div className="flex-1 overflow-y-auto py-2">
               {[...(sSub.items || []), ...(sSub.key ? customNietosForChildKey(cNietos, sSub.key).map(n => n.name) : [])].filter(it => !deletedNodes.includes(typeof it === 'string' ? it : it)).sort((a, b) => String(a).localeCompare(String(b), 'es')).map((item, i) => {
                 const itemName = typeof item === "string" ? item : item.name;
                 const sk = sSub?.key || "";
-                const contact = gc(itemName) || (Array.isArray(contacts[itemName]) && contacts[itemName].length > 0 ? contacts[itemName].map(c => c.name).join(', ') : null);
+                const contact = displayPrimaryContactLabel(
+                  itemName,
+                  fbContactos,
+                  contacts,
+                  CT
+                );
                 const tags = getTagsForItem(itemName);
                 return (
                   <div key={i} onClick={() => { openItem({ name: itemName, contact: contact, _parentKey: sSub?.key || null, _isCustom: customNietosForChildKey(cNietos, sk).some(n => n.name === itemName) }); }}
-                    style={{
-                      padding: "14px 24px", cursor: "pointer", borderBottom: `1px solid ${C.gold}08`,
-                      transition: "background 0.15s"
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = C.gold + "08"}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      {/* Contact indicator */}
-                      <div style={{
-                        width: 10, height: 10, borderRadius: "50%", flexShrink: 0,
-                        background: (contact || hasContact(itemName)) ? C.green : C.pulseRed
-                      }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{
-                          fontSize: 15, fontWeight: 800, color: C.textDk, lineHeight: 1.4,
-                          fontFamily: "'Cormorant Garamond',serif"
-                        }}>{itemName}</div>
+                    className="cursor-pointer border-b border-brand-gold/8 px-6 py-3.5 transition-colors hover:bg-brand-gold/8">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={cn(
+                          "h-2.5 w-2.5 shrink-0 rounded-full",
+                          (contact || hasContact(itemName))
+                            ? "bg-brand-green"
+                            : "bg-danger"
+                        )}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-display text-[15px] font-extrabold leading-snug text-text-dk">{itemName}</div>
                         {contact && (
-                          <div style={{ fontSize: 12, color: C.gold, fontWeight: 600, marginTop: 3 }}>
+                          <div className="mt-0.5 text-xs font-semibold text-brand-gold">
                             👤 {contact}</div>
                         )}
                         {tags.length > 0 && (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 5 }}>
+                          <div className="mt-1.5 flex flex-wrap gap-1">
                             {tags.slice(0, 3).map((tg, ti) => (
-                              <span key={ti} style={{
-                                fontSize: 9, fontWeight: 700, color: C.gold,
-                                background: C.gold + "12", border: `1px solid ${C.gold}20`,
-                                borderRadius: 10, padding: "1px 8px"
-                              }}>{tg}</span>
+                              <span key={ti} className="rounded-[10px] border border-brand-gold/20 bg-brand-gold/15 px-2 py-px text-[9px] font-bold text-brand-gold">{tg}</span>
                             ))}
                           </div>
                         )}
                       </div>
-                      <span style={{ fontSize: 16, color: C.gold, flexShrink: 0 }}>›</span>
+                      <span className="shrink-0 text-base text-brand-gold">›</span>
 
                     </div>
                   </div>
                 );
               })}
             </div>
-            <div style={{ height: 3, background: `linear-gradient(90deg,${sSub.color},${C.gold})`, flexShrink: 0 }} />
+            <div className="h-[3px] shrink-0" style={{ background: `linear-gradient(90deg,${sSub.color},var(--color-brand-gold))` }} />
           </div>
         )}
 
-        {cPanel && !sM && <CentralPanel data={CENTRAL} accent={C.gold} onClose={() => setCPanel(false)} isCentral={true} resolveTags={(t) => getTags(t)} palette={C} />}
+        {cPanel && !sM && <CentralPanel data={CENTRAL} accent={C.gold} onClose={() => setCPanel(false)} isCentral={true} resolveTags={(t) => getTags(t)} />}
       </div>
 
       {/* TOOLTIP */}
       {hov && hov.startsWith("it") && !sItem && (() => {
         const idx = parseInt(hov.slice(2)); const it = sItems[idx]; if (!it) return null;
-        return (<div style={{ position: "fixed", left: ms.x + 16, top: ms.y - 14, pointerEvents: "none", background: C.white, border: `1px solid ${C.gold}30`, borderRadius: 10, padding: "10px 16px", zIndex: 80, maxWidth: 360, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
-          <div style={{ fontSize: 14, color: C.textDk, fontWeight: 800, fontFamily: "'Cormorant Garamond',serif" }}>{it.name}</div>
-          {it.contact && <div style={{ fontSize: 11, color: C.gold, fontWeight: 600, marginTop: 4 }}>👤 {it.contact}</div>}
-          {!it.contact && <div style={{ fontSize: 10, color: C.pulseRed, fontWeight: 600, marginTop: 4 }}>⚠ Pendiente</div>}
+        return (<div className="pointer-events-none fixed z-80 max-w-[360px] rounded-[10px] border border-brand-gold/30 bg-brand-white px-4 py-2.5 shadow-card" style={{ left: ms.x + 16, top: ms.y - 14, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+          <div className="font-display text-sm font-extrabold text-text-dk">{it.name}</div>
+          {it.contact && <div className="mt-1 text-[11px] font-semibold text-brand-gold">👤 {it.contact}</div>}
+          {!it.contact && <div className="mt-1 text-[10px] font-semibold text-danger">⚠ Pendiente</div>}
         </div>);
       })()}
 
-      {sItem && sItem.name && <ItemPopover palette={C} item={sItem} onClose={() => setSItem(null)} noteText={nt} setNoteText={setNt} onSave={() => saveN(sItem.name, nt, sItem?._parentKey || "")} noteHistory={Array.isArray(notes[sItem.name]) ? notes[sItem.name] : []} onDelete={(idx) => delNote(sItem.name, idx, sItem?._parentKey || "")} onEdit={(idx, txt) => editNote(sItem.name, idx, txt, sItem?._parentKey || "")} userContacts={mergeItemPopContacts(sItem?.name, contacts, fbContactos)} onAddContact={c => addContact(sItem.name, c)} onEditContact={(idx, c) => editContact(sItem.name, idx, c)} onDelContact={idx => delContact(sItem.name, idx)}
+      {sItem && sItem.name && <ItemPopover item={sItem} onClose={() => setSItem(null)} noteText={nt} setNoteText={setNt} onSave={() => saveN(sItem.name, nt, sItem?._parentKey || "")} noteHistory={Array.isArray(notes[sItem.name]) ? notes[sItem.name] : []} onDelete={(idx) => delNote(sItem.name, idx, sItem?._parentKey || "")} onEdit={(idx, txt) => editNote(sItem.name, idx, txt, sItem?._parentKey || "")} userContacts={mergeItemPopContacts(sItem?.name, contacts, fbContactos)} onAddContact={c => addContact(sItem.name, c)} onEditContact={(idx, c) => editContact(sItem.name, idx, c)} onDelContact={idx => delContact(sItem.name, idx)} onSetPrimaryContact={(idx) => setPrimaryContact(sItem.name, idx)}
         itemTags={getTagsForItem(sItem?.name || '')}
         onAddTag={addFirebaseTag}
         onRmTag={rmFirebaseTag}
         mainContactHidden={(hiddenCT || []).includes(sItem?.name)} onHideMainContact={hideMainContact} onRestoreMainContact={restoreMainContact}
+        resolvedMainContact={displayPrimaryContactLabel(sItem.name, fbContactos, contacts, CT)}
         onDeleteNode={(sItem?._parentKey || sItem?._level === 'hijo' || sItem?._mainKey) ? () => {
           try {
             const nm = sItem.name;
@@ -1329,7 +1345,7 @@ export default function Dashboard() {
           } catch (e) { console.error(e); }
         } : null} />}
 
-      <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)", fontSize: 10, color: C.textLt + "60", zIndex: 10, pointerEvents: "none", textAlign: "center" }}>
+      <div className="pointer-events-none absolute bottom-2 left-1/2 z-10 -translate-x-1/2 text-center text-[10px] text-text-lt/60">
         {sM && !sProj && !sSub && "Selecciona una subcategoría · Menú izquierdo: navegación"}
         {(sProj || sSub) && "Clic en un elemento para ver detalle y notas"}</div>
     </div>

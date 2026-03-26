@@ -32,7 +32,7 @@ export function MapText({
       fill={fill}
       fontWeight={bold ? 900 : 700}
       fontFamily="'Cormorant Garamond','Georgia',serif"
-      style={{ pointerEvents: "none", letterSpacing: "0.4px" }}
+      className="pointer-events-none tracking-wide"
     >
       {l}
     </text>

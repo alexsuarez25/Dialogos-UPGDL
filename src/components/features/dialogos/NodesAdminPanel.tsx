@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import type { MapTreeCatalogSlice } from "../../../lib/mapLayoutFromCatalog";
-import type { Palette } from "../../../types/palette";
 import {
   customNietosForChildKey,
   type CustomNietosState,
@@ -8,6 +7,7 @@ import {
 import { loadDefaultMapCatalogIntoDatabase } from "../../../lib/firebase/mapCatalogRealtime";
 import { seedTagMapFromObject } from "../../../lib/firebase/tagMapRealtime";
 import { TAG_MAP_DEFAULT } from "../../../tagMapDefault.js";
+import { cn } from "../../../lib/cn";
 
 /** TODO(profile): enable when the signed-in user may run DB migration tools. */
 const MIGRATION_UI_ENABLED = false;
@@ -15,7 +15,6 @@ const MIGRATION_UI_ENABLED = false;
 type NodesAdminPanelProps = {
   open: boolean;
   onClose: () => void;
-  palette: Palette;
   treeCatalog: MapTreeCatalogSlice;
   cNietos: CustomNietosState;
   deletedNodes: string[];
@@ -28,7 +27,6 @@ type NodesAdminPanelProps = {
 export function NodesAdminPanel({
   open,
   onClose,
-  palette: C,
   treeCatalog,
   cNietos,
   deletedNodes,
@@ -66,78 +64,32 @@ export function NodesAdminPanel({
           ? INVEST_SUBS
           : PROJECTS.map((p) => ({ key: p.key, name: p.short }));
 
+  const fieldClass =
+    "mb-1.5 box-border w-full rounded-md border border-brand-gold/30 px-2.5 py-2 text-[13px] outline-none";
+
   return (
     <div
       onClick={(e) => e.stopPropagation()}
-      style={{
-        position: "absolute",
-        top: 14,
-        left: "50%",
-        transform: "translateX(-50%)",
-        zIndex: 30,
-        width: 480,
-        maxHeight: "82vh",
-        background: C.white,
-        border: `1px solid ${C.gold}30`,
-        borderRadius: 16,
-        boxShadow: "0 10px 40px rgba(0,0,0,0.12)",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}
+      className="absolute left-1/2 top-3.5 z-30 flex max-h-[82vh] w-[480px] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-brand-gold/30 bg-brand-white"
+      style={{ boxShadow: "0 10px 40px rgba(0,0,0,0.12)" }}
     >
-      <div
-        style={{
-          padding: "16px 22px 12px",
-          borderBottom: `1px solid ${C.gold}15`,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <span
-          style={{
-            fontSize: 16,
-            fontWeight: 900,
-            color: C.textDk,
-            fontFamily: "'Cormorant Garamond',serif",
-          }}
-        >
+      <div className="flex items-center justify-between border-b border-brand-gold/15 px-[22px] pb-3 pt-4">
+        <span className="font-display text-base font-black text-text-dk">
           Micro-nodos (bajo categoría existente)
         </span>
         <button
           type="button"
           onClick={() => onClose()}
-          style={{
-            background: "transparent",
-            border: `1px solid ${C.gold}30`,
-            borderRadius: 8,
-            width: 28,
-            height: 28,
-            fontSize: 13,
-            cursor: "pointer",
-            color: C.textLt,
-          }}
+          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-brand-gold/30 bg-transparent text-[13px] text-text-lt"
         >
           ✕
         </button>
       </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: "14px 22px" }}>
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 800,
-            color: C.gold,
-            textTransform: "uppercase",
-            letterSpacing: "1px",
-            marginBottom: 8,
-          }}
-        >
+      <div className="flex-1 overflow-y-auto px-[22px] py-3.5">
+        <div className="mb-2 text-[11px] font-extrabold uppercase tracking-wide text-brand-gold">
           1. Rama principal
         </div>
-        <div
-          style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}
-        >
+        <div className="mb-3.5 flex flex-wrap gap-1.5">
           {MAIN.map((m) => (
             <button
               type="button"
@@ -146,19 +98,19 @@ export function NodesAdminPanel({
                 setAdminPadre(m.key);
                 setAdminChildKey("");
               }}
-              style={{
-                padding: "7px 16px",
-                fontSize: 12,
-                fontWeight: 700,
-                borderRadius: 8,
-                cursor: "pointer",
-                border:
-                  adminPadre === m.key
-                    ? `2px solid ${m.color}`
-                    : `1px solid ${C.gold}30`,
-                background: adminPadre === m.key ? m.color : C.white,
-                color: adminPadre === m.key ? C.white : m.color,
-              }}
+              className={cn(
+                "cursor-pointer rounded-lg px-4 py-1.5 text-xs font-bold",
+                adminPadre === m.key ? "border-2 text-brand-white" : "border border-brand-gold/30 bg-brand-white"
+              )}
+              style={
+                adminPadre === m.key
+                  ? {
+                      borderColor: m.color,
+                      background: m.color,
+                      color: "#fff",
+                    }
+                  : { color: m.color }
+              }
             >
               {m.name.split("\n")[0]}
             </button>
@@ -166,30 +118,14 @@ export function NodesAdminPanel({
         </div>
 
         {adminPadre && (
-          <div style={{ marginBottom: 12 }}>
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 800,
-                color: C.gold,
-                textTransform: "uppercase",
-                letterSpacing: "1px",
-                marginBottom: 6,
-              }}
-            >
+          <div className="mb-3">
+            <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-brand-gold">
               2. Categoría (hijo existente)
             </div>
             <select
               value={adminChildKey}
               onChange={(e) => setAdminChildKey(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px",
-                fontSize: 12,
-                border: `1px solid ${C.gold}30`,
-                borderRadius: 6,
-                outline: "none",
-              }}
+              className="w-full rounded-md border border-brand-gold/30 p-2 text-xs outline-none"
             >
               <option value="">Seleccionar subcategoría o proyecto…</option>
               {subsOptions.map((s) => (
@@ -203,31 +139,14 @@ export function NodesAdminPanel({
         )}
 
         {adminPadre && adminChildKey && (
-          <div
-            style={{
-              background: C.gold + "06",
-              border: `1px solid ${C.gold}20`,
-              borderRadius: 10,
-              padding: "14px",
-              marginBottom: 14,
-            }}
-          >
+          <div className="mb-3.5 rounded-[10px] border border-brand-gold/20 bg-brand-gold/6 p-3.5">
             <input
               value={adminForm.name}
               onChange={(e) =>
                 setAdminForm((p) => ({ ...p, name: e.target.value }))
               }
               placeholder="Nombre del micro-nodo *"
-              style={{
-                width: "100%",
-                padding: "8px 10px",
-                fontSize: 13,
-                border: `1px solid ${C.gold}30`,
-                borderRadius: 6,
-                outline: "none",
-                marginBottom: 6,
-                boxSizing: "border-box",
-              }}
+              className={fieldClass}
             />
             <input
               value={adminForm.contact}
@@ -235,16 +154,7 @@ export function NodesAdminPanel({
                 setAdminForm((p) => ({ ...p, contact: e.target.value }))
               }
               placeholder="Contacto (opcional)"
-              style={{
-                width: "100%",
-                padding: "8px 10px",
-                fontSize: 13,
-                border: `1px solid ${C.gold}30`,
-                borderRadius: 6,
-                outline: "none",
-                marginBottom: 8,
-                boxSizing: "border-box",
-              }}
+              className={cn(fieldClass, "mb-2")}
             />
             <button
               type="button"
@@ -260,17 +170,10 @@ export function NodesAdminPanel({
                   console.error(e);
                 }
               }}
-              style={{
-                padding: "8px 20px",
-                fontSize: 12,
-                fontWeight: 800,
-                color: C.white,
-                background: C.gold,
-                border: "none",
-                borderRadius: 8,
-                cursor: "pointer",
-                opacity: adminForm.name.trim() ? 1 : 0.4,
-              }}
+              className={cn(
+                "cursor-pointer rounded-lg border-none bg-brand-gold px-5 py-2 text-xs font-extrabold text-brand-white",
+                !adminForm.name.trim() && "opacity-40"
+              )}
             >
               + Añadir micro-nodo
             </button>
@@ -298,34 +201,15 @@ export function NodesAdminPanel({
                           : INVEST_SUBS
                     ).map((s) => ({ ...s }));
               return (
-                <div
-                  style={{
-                    borderTop: `1px solid ${C.gold}15`,
-                    paddingTop: 14,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      marginBottom: 10,
-                    }}
-                  >
+                <div className="border-t border-brand-gold/15 pt-3.5">
+                  <div className="mb-2.5 flex items-center gap-2">
                     <div
-                      style={{
-                        width: 14,
-                        height: 14,
-                        borderRadius: "50%",
-                        background: padre.color,
-                      }}
+                      className="h-3.5 w-3.5 rounded-full"
+                      style={{ background: padre.color }}
                     />
                     <span
-                      style={{
-                        fontSize: 14,
-                        fontWeight: 900,
-                        color: padre.color,
-                      }}
+                      className="text-sm font-black"
+                      style={{ color: padre.color }}
                     >
                       {padre.name.split("\n")[0]}
                     </span>
@@ -361,88 +245,49 @@ export function NodesAdminPanel({
                         })),
                     ];
                     return (
-                      <div key={hi} style={{ marginLeft: 14, marginBottom: 8 }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                            padding: "5px 0",
-                            borderBottom: `1px solid ${C.gold}08`,
-                          }}
-                        >
+                      <div key={hi} className="mb-2 ml-3.5">
+                        <div className="flex items-center gap-1.5 border-b border-brand-gold/8 py-1">
                           <div
-                            style={{
-                              width: 2,
-                              height: 16,
-                              background: padre.color + "40",
-                            }}
+                            className="h-4 w-0.5"
+                            style={{ background: `${padre.color}66` }}
                           />
                           <div
+                            className="h-2.5 w-2.5 rounded-full"
                             style={{
-                              width: 10,
-                              height: 10,
-                              borderRadius: "50%",
                               background: h.color || padre.color,
                             }}
                           />
-                          <span
-                            style={{
-                              fontSize: 12,
-                              fontWeight: 700,
-                              color: C.textDk,
-                              flex: 1,
-                            }}
-                          >
+                          <span className="flex-1 text-xs font-bold text-text-dk">
                             {(h.name || "").split("\n")[0]}
                           </span>
                           {"listMode" in h && h.listMode && (
-                            <span style={{ fontSize: 8, color: C.textLt }}>
-                              📋
-                            </span>
+                            <span className="text-[8px] text-text-lt">📋</span>
                           )}
                         </div>
                         {!h.listMode &&
                           allN.slice(0, 10).map((n, ni) => (
                             <div
                               key={ni}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 5,
-                                padding: "2px 0",
-                                marginLeft: 22,
-                              }}
+                              className="ml-5 flex items-center gap-1 py-0.5"
                             >
                               <div
+                                className="h-1.5 w-1.5 shrink-0 rounded-full"
                                 style={{
-                                  width: 6,
-                                  height: 6,
-                                  borderRadius: "50%",
                                   background:
                                     n.ct || hasContact(n.name)
-                                      ? C.green
-                                      : C.pulseRed,
+                                      ? "var(--color-brand-green)"
+                                      : "var(--color-danger)",
                                   border: n.bi
                                     ? "none"
-                                    : "1.5px dashed " + C.gold,
+                                    : "1.5px dashed var(--color-brand-gold)",
                                 }}
                               />
-                              <span
-                                style={{
-                                  fontSize: 10,
-                                  color: C.textMd,
-                                  flex: 1,
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
+                              <span className="min-w-0 flex-1 truncate text-[10px] text-text-md">
                                 {n.name}
                               </span>
                               {!n.bi &&
                                 (delConfirm === `n_${h.key}_${n.name}` ? (
-                                  <span style={{ display: "flex", gap: 2 }}>
+                                  <span className="flex gap-0.5">
                                     <button
                                       type="button"
                                       onClick={(e) => {
@@ -450,16 +295,7 @@ export function NodesAdminPanel({
                                         delNieto(h.key, n.name);
                                         setDelConfirm(null);
                                       }}
-                                      style={{
-                                        background: C.pulseRed,
-                                        border: "none",
-                                        color: C.white,
-                                        borderRadius: 3,
-                                        padding: "1px 6px",
-                                        fontSize: 8,
-                                        fontWeight: 700,
-                                        cursor: "pointer",
-                                      }}
+                                      className="cursor-pointer rounded-sm border-none bg-danger px-1.5 py-px text-[8px] font-bold text-brand-white"
                                     >
                                       Sí
                                     </button>
@@ -469,15 +305,7 @@ export function NodesAdminPanel({
                                         e.stopPropagation();
                                         setDelConfirm(null);
                                       }}
-                                      style={{
-                                        background: "transparent",
-                                        border: `1px solid ${C.gold}15`,
-                                        color: C.textLt,
-                                        borderRadius: 3,
-                                        padding: "1px 6px",
-                                        fontSize: 8,
-                                        cursor: "pointer",
-                                      }}
+                                      className="cursor-pointer rounded-sm border border-brand-gold/15 bg-transparent px-1.5 py-px text-[8px] text-text-lt"
                                     >
                                       No
                                     </button>
@@ -489,16 +317,7 @@ export function NodesAdminPanel({
                                       e.stopPropagation();
                                       setDelConfirm(`n_${h.key}_${n.name}`);
                                     }}
-                                    style={{
-                                      background: "transparent",
-                                      border: `1px solid ${C.pulseRed}15`,
-                                      color: C.pulseRed,
-                                      borderRadius: 3,
-                                      padding: "1px 5px",
-                                      fontSize: 8,
-                                      fontWeight: 700,
-                                      cursor: "pointer",
-                                    }}
+                                    className="cursor-pointer rounded-sm border border-danger/15 bg-transparent px-1 py-px text-[8px] font-bold text-danger"
                                   >
                                     ×
                                   </button>
@@ -506,38 +325,19 @@ export function NodesAdminPanel({
                             </div>
                           ))}
                         {!h.listMode && allN.length > 10 && (
-                          <div
-                            style={{
-                              fontSize: 9,
-                              color: C.textLt,
-                              marginLeft: 22,
-                              fontStyle: "italic",
-                            }}
-                          >
+                          <div className="ml-5 text-[9px] italic text-text-lt">
                             +{allN.length - 10} más
                           </div>
                         )}
                         {h.listMode && (
-                          <div
-                            style={{
-                              fontSize: 9,
-                              color: C.textLt,
-                              marginLeft: 22,
-                            }}
-                          >
+                          <div className="ml-5 text-[9px] text-text-lt">
                             📋 {hItems.length + cItems.length} elementos
                           </div>
                         )}
                       </div>
                     );
                   })}
-                  <div
-                    style={{
-                      fontSize: 9,
-                      color: C.textLt,
-                      marginTop: 8,
-                    }}
-                  >
+                  <div className="mt-2 text-[9px] text-text-lt">
                     {builtIn.length} categorías · borde punteado = micro-nodo
                     añadido
                   </div>
@@ -550,172 +350,124 @@ export function NodesAdminPanel({
           })()}
 
         {MIGRATION_UI_ENABLED && (
-        <div
-          style={{
-            marginTop: 20,
-            paddingTop: 16,
-            borderTop: `1px solid ${C.gold}15`,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 800,
-              color: C.gold,
-              textTransform: "uppercase",
-              letterSpacing: "1px",
-              marginBottom: 6,
-            }}
-          >
-            Base de datos · migración
-          </div>
-          <p
-            style={{
-              fontSize: 10,
-              color: C.textLt,
-              margin: "0 0 10px",
-              lineHeight: 1.45,
-            }}
-          >
-            Si cambiaste de proyecto Firebase o la ruta{" "}
-            <span style={{ fontWeight: 700 }}>map_catalog</span> está vacía o
-            desfasada, puedes volcar el árbol integrado desde el código
-            (main, proyectos, subcategorías).
-          </p>
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: 8 }}
-          >
-            <button
-              type="button"
-              disabled={migrateBusy}
-              onClick={async () => {
-                setMigrateMsg(null);
-                setMigrateBusy(true);
-                try {
-                  await loadDefaultMapCatalogIntoDatabase("mergeBuiltIn");
-                  setMigrateMsg(
-                    "Listo: árbol integrado actualizado. Los micro-nodos en custom_nietos se conservaron."
-                  );
-                } catch (e) {
-                  console.error(e);
-                  setMigrateMsg(
-                    `Error: ${e instanceof Error ? e.message : String(e)}`
-                  );
-                } finally {
-                  setMigrateBusy(false);
-                }
-              }}
-              style={{
-                padding: "10px 14px",
-                fontSize: 11,
-                fontWeight: 700,
-                borderRadius: 10,
-                cursor: migrateBusy ? "wait" : "pointer",
-                border: `1px solid ${C.gold}40`,
-                background: C.gold + "12",
-                color: C.goldDk,
-                textAlign: "left",
-              }}
-            >
-              Actualizar árbol integrado (conserva micro-nodos personalizados)
-            </button>
-            <button
-              type="button"
-              disabled={migrateBusy}
-              onClick={async () => {
-                if (
-                  !window.confirm(
-                    "Se reemplazará todo map_catalog: árbol por defecto del código y se vaciará custom_nietos (micro-nodos). map_app_state no se modifica. ¿Continuar?"
-                  )
-                )
-                  return;
-                setMigrateMsg(null);
-                setMigrateBusy(true);
-                try {
-                  await loadDefaultMapCatalogIntoDatabase("replaceAll");
-                  setMigrateMsg(
-                    "Listo: map_catalog reiniciado al catálogo por defecto (sin micro-nodos)."
-                  );
-                } catch (e) {
-                  console.error(e);
-                  setMigrateMsg(
-                    `Error: ${e instanceof Error ? e.message : String(e)}`
-                  );
-                } finally {
-                  setMigrateBusy(false);
-                }
-              }}
-              style={{
-                padding: "10px 14px",
-                fontSize: 11,
-                fontWeight: 700,
-                borderRadius: 10,
-                cursor: migrateBusy ? "wait" : "pointer",
-                border: `1px solid ${C.pulseRed}35`,
-                background: C.pulseRed + "10",
-                color: C.pulseRed,
-                textAlign: "left",
-              }}
-            >
-              Inicializar catálogo completo (borra micro-nodos en RTDB)
-            </button>
-            <button
-              type="button"
-              disabled={migrateBusy}
-              onClick={async () => {
-                if (
-                  !window.confirm(
-                    "Se sobrescribirá tag_map/entries con el mapa de etiquetas por defecto del repositorio. ¿Continuar?"
-                  )
-                )
-                  return;
-                setMigrateMsg(null);
-                setMigrateBusy(true);
-                try {
-                  await seedTagMapFromObject(TAG_MAP_DEFAULT);
-                  setMigrateMsg(
-                    "Listo: tag_map sembrado con TAG_MAP_DEFAULT."
-                  );
-                } catch (e) {
-                  console.error(e);
-                  setMigrateMsg(
-                    `Error: ${e instanceof Error ? e.message : String(e)}`
-                  );
-                } finally {
-                  setMigrateBusy(false);
-                }
-              }}
-              style={{
-                padding: "10px 14px",
-                fontSize: 11,
-                fontWeight: 700,
-                borderRadius: 10,
-                cursor: migrateBusy ? "wait" : "pointer",
-                border: `1px solid ${C.gold}30`,
-                background: C.white,
-                color: C.textDk,
-                textAlign: "left",
-              }}
-            >
-              Sembrar etiquetas por defecto (tag_map)
-            </button>
-          </div>
-          {migrateMsg && (
-            <div
-              style={{
-                marginTop: 10,
-                fontSize: 10,
-                fontWeight: 600,
-                color: migrateMsg.startsWith("Error")
-                  ? C.pulseRed
-                  : C.green,
-                lineHeight: 1.4,
-              }}
-            >
-              {migrateMsg}
+          <div className="mt-5 border-t border-brand-gold/15 pt-4">
+            <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-brand-gold">
+              Base de datos · migración
             </div>
-          )}
-        </div>
+            <p className="mb-2.5 text-[10px] leading-snug text-text-lt">
+              Si cambiaste de proyecto Firebase o la ruta{" "}
+              <span className="font-bold">map_catalog</span> está vacía o
+              desfasada, puedes volcar el árbol integrado desde el código
+              (main, proyectos, subcategorías).
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={migrateBusy}
+                onClick={async () => {
+                  setMigrateMsg(null);
+                  setMigrateBusy(true);
+                  try {
+                    await loadDefaultMapCatalogIntoDatabase("mergeBuiltIn");
+                    setMigrateMsg(
+                      "Listo: árbol integrado actualizado. Los micro-nodos en custom_nietos se conservaron."
+                    );
+                  } catch (e) {
+                    console.error(e);
+                    setMigrateMsg(
+                      `Error: ${e instanceof Error ? e.message : String(e)}`
+                    );
+                  } finally {
+                    setMigrateBusy(false);
+                  }
+                }}
+                className={cn(
+                  "rounded-[10px] border border-brand-gold/40 bg-brand-gold/15 py-2.5 pl-3.5 pr-3.5 text-left text-[11px] font-bold text-brand-gold-dk",
+                  migrateBusy && "cursor-wait"
+                )}
+              >
+                Actualizar árbol integrado (conserva micro-nodos personalizados)
+              </button>
+              <button
+                type="button"
+                disabled={migrateBusy}
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      "Se reemplazará todo map_catalog: árbol por defecto del código y se vaciará custom_nietos (micro-nodos). map_app_state no se modifica. ¿Continuar?"
+                    )
+                  )
+                    return;
+                  setMigrateMsg(null);
+                  setMigrateBusy(true);
+                  try {
+                    await loadDefaultMapCatalogIntoDatabase("replaceAll");
+                    setMigrateMsg(
+                      "Listo: map_catalog reiniciado al catálogo por defecto (sin micro-nodos)."
+                    );
+                  } catch (e) {
+                    console.error(e);
+                    setMigrateMsg(
+                      `Error: ${e instanceof Error ? e.message : String(e)}`
+                    );
+                  } finally {
+                    setMigrateBusy(false);
+                  }
+                }}
+                className={cn(
+                  "rounded-[10px] border border-danger/35 bg-danger/10 py-2.5 pl-3.5 pr-3.5 text-left text-[11px] font-bold text-danger",
+                  migrateBusy && "cursor-wait"
+                )}
+              >
+                Inicializar catálogo completo (borra micro-nodos en RTDB)
+              </button>
+              <button
+                type="button"
+                disabled={migrateBusy}
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      "Se sobrescribirá tag_map/entries con el mapa de etiquetas por defecto del repositorio. ¿Continuar?"
+                    )
+                  )
+                    return;
+                  setMigrateMsg(null);
+                  setMigrateBusy(true);
+                  try {
+                    await seedTagMapFromObject(TAG_MAP_DEFAULT);
+                    setMigrateMsg(
+                      "Listo: tag_map sembrado con TAG_MAP_DEFAULT."
+                    );
+                  } catch (e) {
+                    console.error(e);
+                    setMigrateMsg(
+                      `Error: ${e instanceof Error ? e.message : String(e)}`
+                    );
+                  } finally {
+                    setMigrateBusy(false);
+                  }
+                }}
+                className={cn(
+                  "rounded-[10px] border border-brand-gold/30 bg-brand-white py-2.5 pl-3.5 pr-3.5 text-left text-[11px] font-bold text-text-dk",
+                  migrateBusy && "cursor-wait"
+                )}
+              >
+                Sembrar etiquetas por defecto (tag_map)
+              </button>
+            </div>
+            {migrateMsg && (
+              <div
+                className={cn(
+                  "mt-2.5 text-[10px] font-semibold leading-snug",
+                  migrateMsg.startsWith("Error")
+                    ? "text-danger"
+                    : "text-brand-green"
+                )}
+              >
+                {migrateMsg}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
