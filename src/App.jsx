@@ -9,6 +9,13 @@ import ContactosFirebasePanel from "./ContactosFirebasePanel.jsx";
 import TagMapFirebasePanel from "./TagMapFirebasePanel.jsx";
 import { TAGS, TAG_MAP_DEFAULT } from "./tagMapDefault.js";
 import { subscribeTagMap, setTagMapEntry, deleteTagMapEntry } from "../firebaseTagMapRealtime";
+import {
+  appendNotaNieto,
+  updateNotaNieto,
+  deleteNotaNieto,
+  removeAllNotasForNieto,
+  subscribeNotasNieto,
+} from "../firebaseNotasNietoRealtime";
 
 /* ═══════════════════════════════════════════════════════════════════
    MAPA RADIAL v21 — DIÁLOGOS CON EL ENTORNO
@@ -38,6 +45,15 @@ function isNietoNodeName(name, cNietos) {
     if (Array.isArray(arr) && arr.some((n) => n && String(n.name) === String(name))) return true;
   }
   return false;
+}
+
+/** Clave del sub (hijo) bajo el que cuelga el nieto — mismo uso que `_parentKey` en ItemPop. */
+function getNietoParentKeyForName(name, cNietos) {
+  if (!name || !cNietos || typeof cNietos !== "object") return "";
+  for (const [pk, arr] of Object.entries(cNietos)) {
+    if (Array.isArray(arr) && arr.some((n) => n && String(n.name) === String(name))) return pk;
+  }
+  return "";
 }
 
 
@@ -950,27 +966,83 @@ export default function Dashboard() {
     );
   }, []);
 
-  const saveN = useCallback(async (k, t) => {
+  useEffect(() => {
+    const nm = String(sItem?.name || "").trim();
+    const pk = String(sItem?._parentKey || "").trim() || getNietoParentKeyForName(nm, cNietos);
+    if (!nm || !pk) return;
+    return subscribeNotasNieto(
+      pk,
+      nm,
+      (rows) => {
+        const dbRows = (rows || []).map((r) => ({
+          fbId: String(r.id || ""),
+          text: String(r.text || ""),
+          date: String(r.date || ""),
+          edited: String(r.edited || ""),
+        }));
+        setNotes((prev) => {
+          const local = Array.isArray(prev[nm]) ? prev[nm] : [];
+          const localOnly = local.filter((n) => !n?.fbId);
+          const merged = [...dbRows, ...localOnly];
+          const next = { ...prev, [nm]: merged };
+          try { window.storage.set("map-notes-v21", JSON.stringify(next)); } catch (e) { }
+          return next;
+        });
+      },
+      (err) => console.error("RTDB subscribe nota nieto:", err)
+    );
+  }, [sItem?.name, sItem?._parentKey, cNietos]);
+
+  const saveN = useCallback(async (k, t, parentKey = "") => {
     const stripped = t.replace(/<[^>]*>/g, '').trim(); if (!stripped) return;
     const existing = Array.isArray(notes[k]) ? notes[k] : [];
     const entry = { text: t.trim(), date: new Date().toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) };
+    const pk = String(parentKey || "").trim() || getNietoParentKeyForName(k, cNietos);
+    if (pk) {
+      try {
+        const fbId = await appendNotaNieto(pk, k, { text: entry.text, date: entry.date });
+        entry.fbId = fbId;
+      } catch (e) {
+        console.error("RTDB nota nieto:", e);
+      }
+    }
     const nx = { ...notes, [k]: [entry, ...existing] };
     setNotes(nx); setNt('');
     try { await window.storage.set('map-notes-v21', JSON.stringify(nx)); } catch (e) { }
-  }, [notes]);
-  const editNote = useCallback(async (k, idx, newText) => {
+  }, [notes, cNietos]);
+  const editNote = useCallback(async (k, idx, newText, parentKey = "") => {
     const existing = Array.isArray(notes[k]) ? [...notes[k]] : [];
-    if (existing[idx]) { existing[idx] = { ...existing[idx], text: newText, edited: new Date().toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }; }
+    if (!existing[idx]) return;
+    const edited = new Date().toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const row = existing[idx];
+    const pk = String(parentKey || "").trim() || getNietoParentKeyForName(k, cNietos);
+    if (row.fbId && pk) {
+      try {
+        await updateNotaNieto(pk, k, String(row.fbId), { text: newText, edited });
+      } catch (e) {
+        console.error("RTDB update nota nieto:", e);
+      }
+    }
+    existing[idx] = { ...row, text: newText, edited };
     const nx = { ...notes, [k]: existing }; setNotes(nx);
     try { await window.storage.set('map-notes-v21', JSON.stringify(nx)); } catch (e) { }
-  }, [notes]);
-  const delNote = useCallback(async (k, idx) => {
+  }, [notes, cNietos]);
+  const delNote = useCallback(async (k, idx, parentKey = "") => {
     const existing = Array.isArray(notes[k]) ? [...notes[k]] : [];
+    const row = existing[idx];
     existing.splice(idx, 1);
+    const pk = String(parentKey || "").trim() || getNietoParentKeyForName(k, cNietos);
+    if (row?.fbId && pk) {
+      try {
+        await deleteNotaNieto(pk, k, String(row.fbId));
+      } catch (e) {
+        console.error("RTDB delete nota nieto:", e);
+      }
+    }
     const nx = { ...notes, [k]: existing };
     setNotes(nx);
     try { await window.storage.set('map-notes-v21', JSON.stringify(nx)); } catch (e) { }
-  }, [notes]);
+  }, [notes, cNietos]);
 
   const hideMainContact = useCallback(async (name) => {
     if (!name) return; const nx = [...hiddenCT, name]; setHiddenCT(nx);
@@ -1225,7 +1297,7 @@ export default function Dashboard() {
             borderRadius: 8, cursor: "pointer", color: showAdmin ? C.white : C.gold, fontWeight: 700, marginLeft: 8, flexShrink: 0
           }}>
           ⚙ Nodos</button>
-        <button onClick={e => {
+        {/* <button onClick={e => {
           e.stopPropagation();
           setShowContactosFb(a => {
             const n = !a; if (n) { setShowAdmin(false); setShowTagMapFb(false); } return n;
@@ -1246,7 +1318,7 @@ export default function Dashboard() {
             fontSize: 10, padding: "6px 14px", background: showTagMapFb ? C.gold : C.gold + "15", border: `1px solid ${C.gold}40`,
             borderRadius: 8, cursor: "pointer", color: showTagMapFb ? C.white : C.goldDk, fontWeight: 700, marginLeft: 6, flexShrink: 0
           }}>
-          🏷 Etiquetas</button>
+          🏷 Etiquetas</button> */}
       </div>
 
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
@@ -1851,7 +1923,7 @@ export default function Dashboard() {
         </div>);
       })()}
 
-      {sItem && sItem.name && <ItemPop item={sItem} onClose={() => setSItem(null)} noteText={nt} setNoteText={setNt} onSave={() => saveN(sItem.name, nt)} noteHistory={Array.isArray(notes[sItem.name]) ? notes[sItem.name] : []} onDelete={(idx) => delNote(sItem.name, idx)} onEdit={(idx, txt) => editNote(sItem.name, idx, txt)} userContacts={Array.isArray(contacts[sItem?.name]) ? contacts[sItem.name] : []} onAddContact={c => addContact(sItem.name, c)} onEditContact={(idx, c) => editContact(sItem.name, idx, c)} onDelContact={idx => delContact(sItem.name, idx)}
+      {sItem && sItem.name && <ItemPop item={sItem} onClose={() => setSItem(null)} noteText={nt} setNoteText={setNt} onSave={() => saveN(sItem.name, nt, sItem?._parentKey || "")} noteHistory={Array.isArray(notes[sItem.name]) ? notes[sItem.name] : []} onDelete={(idx) => delNote(sItem.name, idx, sItem?._parentKey || "")} onEdit={(idx, txt) => editNote(sItem.name, idx, txt, sItem?._parentKey || "")} userContacts={Array.isArray(contacts[sItem?.name]) ? contacts[sItem.name] : []} onAddContact={c => addContact(sItem.name, c)} onEditContact={(idx, c) => editContact(sItem.name, idx, c)} onDelContact={idx => delContact(sItem.name, idx)}
         itemTags={getTagsForItem(sItem?.name || '')}
         onAddTag={addFirebaseTag}
         onRmTag={rmFirebaseTag}
@@ -1861,6 +1933,9 @@ export default function Dashboard() {
             const nm = sItem.name;
             if (sItem._isCustom && sItem._parentKey) {
               delNieto(sItem._parentKey, nm);
+              (async () => {
+                try { await removeAllNotasForNieto(sItem._parentKey, nm); } catch (e4) { console.error("RTDB notas nieto:", e4); }
+              })();
             } else if (sItem._level === 'hijo' && sItem._mainKey) {
               /* Delete a hijo (sub): add to deletedNodes + remove custom hijo if applicable */
               deleteBuiltIn(nm);
