@@ -13,8 +13,8 @@ import {
   onValue,
   type Unsubscribe,
 } from "firebase/database";
-import { app } from "./firebase";
-import { encodeTagMapKey } from "./firebaseTagMapRealtime";
+import { app } from "./client";
+import { encodeTagMapKey } from "./tagMapRealtime";
 
 export const NOTAS_NIETOS_ROOT = "notas_nietos";
 

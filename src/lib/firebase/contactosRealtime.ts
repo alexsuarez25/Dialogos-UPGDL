@@ -15,7 +15,7 @@ import {
   type DatabaseReference,
   type Unsubscribe,
 } from "firebase/database";
-import { app } from "./firebase";
+import { app } from "./client";
 
 /** Root path segment for contact records in Realtime Database */
 export const CT = "contactos";

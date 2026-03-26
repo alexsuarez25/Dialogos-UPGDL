@@ -1,9 +1,18 @@
-import React, { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   createContacto,
   updateContacto,
   deleteContacto,
-} from "../firebaseContactosRealtime";
+} from "../../../lib/firebase/contactosRealtime";
+import type { Palette } from "../../../types/palette";
+
+export type PatronContactRecord = {
+  id: string;
+  patron: string;
+  nombre: string;
+  email?: string;
+  notas?: string;
+};
 
 const emptyForm = () => ({
   patron: "",
@@ -20,7 +29,17 @@ const emptyForm = () => ({
  * @param {Array<{id: string, patron: string, nombre: string, email?: string, notas?: string}>} props.records
  * @param {object} props.palette — mismo objeto `C` que App (colores UP).
  */
-export default function ContactosFirebasePanel({ open, onClose, records, palette: C }) {
+export default function ContactosFirebasePanel({
+  open,
+  onClose,
+  records,
+  palette: C,
+}: {
+  open: boolean;
+  onClose: () => void;
+  records: PatronContactRecord[];
+  palette: Palette;
+}) {
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -156,8 +175,7 @@ export default function ContactosFirebasePanel({ open, onClose, records, palette
             Reglas globales por patrón. Los contactos por nodo (varios documentos con el mismo vínculo) se gestionan en el mapa al abrir un micro-nodo.
           </div>
         </div>
-        <button
-          type="button"
+<button type="button"
           onClick={() => {
             resetForm();
             onClose();
@@ -277,8 +295,7 @@ export default function ContactosFirebasePanel({ open, onClose, records, palette
             }}
           />
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            <button
-              type="button"
+<button type="button"
               disabled={busy}
               onClick={onSave}
               style={{
@@ -295,8 +312,7 @@ export default function ContactosFirebasePanel({ open, onClose, records, palette
             >
               {editingId ? "Actualizar" : "Crear"}
             </button>
-            <button
-              type="button"
+<button type="button"
               disabled={busy}
               onClick={onNew}
               style={{
@@ -313,8 +329,7 @@ export default function ContactosFirebasePanel({ open, onClose, records, palette
               Limpiar / Nuevo
             </button>
             {editingId && (
-              <button
-                type="button"
+<button type="button"
                 disabled={busy}
                 onClick={onDelete}
                 style={{
@@ -368,9 +383,8 @@ export default function ContactosFirebasePanel({ open, onClose, records, palette
             </div>
           ) : (
             sorted.map((r) => (
-              <button
+<button type="button" 
                 key={r.id}
-                type="button"
                 onClick={() => selectRow(r)}
                 style={{
                   width: "100%",

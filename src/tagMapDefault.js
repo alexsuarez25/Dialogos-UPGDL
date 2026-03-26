@@ -1,6 +1,6 @@
 /**
  * TAGS + TAG_MAP por defecto (fallback si Firebase está vacío).
- * Sincroniza a RT con el panel o firebaseTagMapRealtime.seedTagMapFromObject.
+ * Sincroniza a RT con el panel o src/lib/firebase/tagMapRealtime.seedTagMapFromObject.
  */
 
 export const TAGS = [

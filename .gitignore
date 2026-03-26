@@ -1,3 +1,11 @@
 dist/
 node_modules/
 .DS_Store
+
+# Env files with secrets / per-environment Firebase config (not committed)
+.env.development
+.env.production
+
+# Local env overrides (optional)
+.env.local
+.env.*.local

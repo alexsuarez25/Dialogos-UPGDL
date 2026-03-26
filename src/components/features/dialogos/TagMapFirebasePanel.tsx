@@ -1,11 +1,12 @@
-import React, { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   setTagMapEntry,
   deleteTagMapEntry,
   seedTagMapFromObject,
   clearTagMapEntries,
-} from "../firebaseTagMapRealtime";
-import { TAGS, TAG_MAP_DEFAULT } from "./tagMapDefault.js";
+} from "../../../lib/firebase/tagMapRealtime";
+import { TAGS, TAG_MAP_DEFAULT } from "../../../tagMapDefault.js";
+import type { Palette } from "../../../types/palette";
 
 const emptyForm = () => ({ name: "", indicesStr: "" });
 
@@ -24,6 +25,12 @@ export default function TagMapFirebasePanel({
   tagMap,
   usingFallback,
   palette: C,
+}: {
+  open: boolean;
+  onClose: () => void;
+  tagMap: Record<string, number[]>;
+  usingFallback: boolean;
+  palette: Palette;
 }) {
   const [form, setForm] = useState(emptyForm);
   const [busy, setBusy] = useState(false);
@@ -179,11 +186,11 @@ export default function TagMapFirebasePanel({
             Etiquetas por nodo (TAG_MAP)
           </div>
           <div style={{ fontSize: 10, color: C.textLt, marginTop: 4 }}>
-            Realtime DB: <code style={{ fontSize: 9 }}>tag_map/entries</code>
+            Realtime DB:{" "}
+            <code style={{ fontSize: 9 }}>tag_map/entries</code>
           </div>
         </div>
-        <button
-          type="button"
+<button type="button"
           onClick={onClose}
           style={{
             background: "transparent",
@@ -262,7 +269,9 @@ export default function TagMapFirebasePanel({
           />
           <input
             value={form.indicesStr}
-            onChange={(e) => setForm((f) => ({ ...f, indicesStr: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, indicesStr: e.target.value }))
+            }
             placeholder="Índices separados por coma (ej. 0, 7, 14)"
             style={{
               width: "100%",
@@ -292,9 +301,8 @@ export default function TagMapFirebasePanel({
               {TAGS.map((t, i) => {
                 const on = parseIndices(form.indicesStr).includes(i);
                 return (
-                  <button
+<button type="button" 
                     key={t}
-                    type="button"
                     onClick={() => toggleIdx(i)}
                     style={{
                       fontSize: 10,
@@ -314,8 +322,7 @@ export default function TagMapFirebasePanel({
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              type="button"
+<button type="button"
               disabled={busy}
               onClick={onSave}
               style={{
@@ -331,8 +338,7 @@ export default function TagMapFirebasePanel({
             >
               Guardar
             </button>
-            <button
-              type="button"
+<button type="button"
               disabled={busy || !form.name.trim()}
               onClick={onDelete}
               style={{
@@ -348,8 +354,7 @@ export default function TagMapFirebasePanel({
             >
               Borrar en Firebase
             </button>
-            <button
-              type="button"
+<button type="button"
               disabled={busy}
               onClick={onNew}
               style={{
@@ -393,9 +398,8 @@ export default function TagMapFirebasePanel({
             <div style={{ padding: 16, fontSize: 12, color: C.textLt }}>Sin filas.</div>
           ) : (
             rows.map((r) => (
-              <button
+<button type="button" 
                 key={r.name}
-                type="button"
                 onClick={() => selectRow(r)}
                 style={{
                   display: "block",
@@ -427,8 +431,7 @@ export default function TagMapFirebasePanel({
           }}
         >
           {!confirmSeed ? (
-            <button
-              type="button"
+<button type="button"
               disabled={busy}
               onClick={() => setConfirmSeed(true)}
               style={{
@@ -451,8 +454,7 @@ export default function TagMapFirebasePanel({
                 ¿Sobrescribir todas las entradas en la nube con TAG_MAP_DEFAULT?
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  type="button"
+<button type="button"
                   disabled={busy}
                   onClick={onSeed}
                   style={{
@@ -469,8 +471,7 @@ export default function TagMapFirebasePanel({
                 >
                   Sí, subir
                 </button>
-                <button
-                  type="button"
+<button type="button"
                   disabled={busy}
                   onClick={() => setConfirmSeed(false)}
                   style={{
@@ -490,8 +491,7 @@ export default function TagMapFirebasePanel({
           )}
 
           {!confirmClear ? (
-            <button
-              type="button"
+<button type="button"
               disabled={busy}
               onClick={() => setConfirmClear(true)}
               style={{
@@ -512,12 +512,11 @@ export default function TagMapFirebasePanel({
           ) : (
             <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ fontSize: 11, color: C.textMd }}>
-                Se borrará <code>tag_map/entries</code>. La interfaz usará el respaldo hasta que
-                subas de nuevo.
+                Se borrará <code>tag_map/entries</code>. La interfaz usará el
+                respaldo hasta que subas de nuevo.
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  type="button"
+<button type="button"
                   disabled={busy}
                   onClick={onClearRemote}
                   style={{
@@ -534,8 +533,7 @@ export default function TagMapFirebasePanel({
                 >
                   Vaciar remoto
                 </button>
-                <button
-                  type="button"
+<button type="button"
                   disabled={busy}
                   onClick={() => setConfirmClear(false)}
                   style={{

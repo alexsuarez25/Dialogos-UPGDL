@@ -12,7 +12,7 @@ import {
   onValue,
   type Unsubscribe,
 } from "firebase/database";
-import { app } from "./firebase";
+import { app } from "./client";
 
 export const TAG_MAP_ROOT = "tag_map";
 

@@ -1,24 +1,108 @@
-# Mapa de Diálogos – Vite
+# Mapa de Diálogos – Vite + React
 
-## Install
+Interactive map for **Diálogos con el Entorno** (Universidad Panamericana Guadalajara). The app uses **React 18**, **TypeScript**, **Vite 5**, and **Firebase** (Realtime Database + Analytics).
+
+## Prerequisites
+
+- **Node.js** 18+ (LTS recommended)
+- **npm** (comes with Node)
+
+## Setup
+
+### 1. Clone and install dependencies
 
 ```bash
+git clone https://github.com/alexsuarez25/Dialogos-UPGDL.git
+cd Dialogos-UPGDL
 npm install
 ```
 
-## Run locally
+### 2. Environment variables (Firebase)
+
+Configuration is read from Vite env files. Only variables prefixed with `VITE_` are exposed to the browser.
+
+| Command | Mode | File Vite loads (in order) |
+|--------|------|----------------------------|
+| `npm run dev` | development | `.env`, `.env.local`, `.env.development`, `.env.development.local` |
+| `npm run build` | production | `.env`, `.env.local`, `.env.production`, `.env.production.local` |
+
+**`.env.development`** and **`.env.production`** are **not** tracked in git (see `.gitignore`). After cloning, create them locally:
+
+1. Copy **`.env.example`** to **`.env.development`** (for `npm run dev`) and/or **`.env.production`** (for local `npm run build` / `npm run preview`).
+2. Fill in every `VITE_FIREBASE_*` value from the Firebase console (**Project settings → Your apps → SDK setup**).
+
+Optional overrides (also gitignored when named `*.local`):
+
+- **`.env.local`** — applies to all modes.
+- **`.env.development.local`** / **`.env.production.local`** — overrides for a single mode.
+
+If any required variable is missing, the app throws a clear error at startup when Firebase initializes (`src/lib/firebase/client.ts`).
+
+### 3. Run the app
+
+**Development** (hot reload, uses `.env.development`):
 
 ```bash
 npm run dev
 ```
 
-## Build
+Open the URL Vite prints (usually `http://localhost:5173`).
+
+**Production build** (uses `.env.production`):
 
 ```bash
 npm run build
 ```
 
-## Deploy on Netlify
+**Preview the production build locally**:
 
-- Build command: `npm run build`
-- Publish directory: `dist`
+```bash
+npm run preview
+```
+
+## Project layout (short)
+
+- **`src/main.jsx`** — entry; mounts React.
+- **`src/components/layout/App.tsx`** — thin shell; loads the main feature screen.
+- **`src/components/features/dialogos/`** — map UI (`Dashboard`, panels, popovers, etc.).
+- **`src/lib/`** — shared logic (`mapStatic`, search, geometry, …).
+- **`src/lib/firebase/`** — Firebase app init (`client.ts`) and Realtime Database helpers (`contactosRealtime`, `tagMapRealtime`, `notasNietoRealtime`).
+- **`src/types/`** — shared TypeScript types.
+
+Firebase **client** config is public by design (it ships in the bundle). Protect data with **Firebase Realtime Database rules** (and any other Firebase security) in the console.
+
+## Deploy (e.g. Netlify)
+
+- **Build command:** `npm run build`
+- **Publish directory:** `dist`
+
+### Production env vars on Netlify
+
+Vite reads `import.meta.env` **at build time**, so Firebase values must be present when Netlify runs `npm run build`. They are not read from the browser at runtime.
+
+1. In the Netlify dashboard: **Site configuration** → **Environment variables** (or **Build & deploy** → **Environment** → **Environment variables**).
+2. Add each key **exactly** as below (names must start with `VITE_`). Use the same values as **`.env.production`** / your production Firebase app (**Project settings → Your apps → SDK setup**).
+3. Set **Deploy context** to **Production** (or **All** if this site is only used for production).
+
+| Variable | Notes |
+|----------|--------|
+| `VITE_FIREBASE_API_KEY` | Required |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Required |
+| `VITE_FIREBASE_PROJECT_ID` | Required |
+| `VITE_FIREBASE_DATABASE_URL` | Required |
+| `VITE_FIREBASE_STORAGE_BUCKET` | Required |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Required |
+| `VITE_FIREBASE_APP_ID` | Required |
+| `VITE_FIREBASE_MEASUREMENT_ID` | Optional; omit only if you do not use Analytics |
+
+4. Save, then trigger a new deploy (**Deploys** → **Trigger deploy**). Use **Clear cache and deploy site** if a previous build cached the wrong config.
+
+On Netlify, define production Firebase in **Environment variables** (see above); do not rely on a committed `.env.production` in the repo. For a **local** production build, keep **`.env.production`** on your machine only (gitignored).
+
+## Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start Vite dev server |
+| `npm run build` | Production build → `dist/` |
+| `npm run preview` | Serve `dist/` locally |
