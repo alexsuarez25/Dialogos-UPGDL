@@ -9,6 +9,9 @@ import { loadDefaultMapCatalogIntoDatabase } from "../../../lib/firebase/mapCata
 import { seedTagMapFromObject } from "../../../lib/firebase/tagMapRealtime";
 import { TAG_MAP_DEFAULT } from "../../../tagMapDefault.js";
 
+/** TODO(profile): enable when the signed-in user may run DB migration tools. */
+const MIGRATION_UI_ENABLED = false;
+
 type NodesAdminPanelProps = {
   open: boolean;
   onClose: () => void;
@@ -546,6 +549,7 @@ export function NodesAdminPanel({
             }
           })()}
 
+        {MIGRATION_UI_ENABLED && (
         <div
           style={{
             marginTop: 20,
@@ -712,6 +716,7 @@ export function NodesAdminPanel({
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );
