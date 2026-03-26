@@ -2,8 +2,10 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
   subscribeContactos,
   removeContactosLinkedToNode,
-  replaceContactosForParent,
   appendContactoForNieto,
+  appendContactoForParent,
+  updateContacto,
+  deleteContacto,
 } from "../firebaseContactosRealtime";
 import ContactosFirebasePanel from "./ContactosFirebasePanel.jsx";
 import TagMapFirebasePanel from "./TagMapFirebasePanel.jsx";
@@ -140,15 +142,28 @@ function smartSearch(query) {
 /* ─── CONTACTOS (CT = mapa estático; Firebase: docs con `parentKey` = nodo, o `patron` = regla global) ─── */
 const fbContactosRef = { current: [] };
 const CT = { "Secretaría de Educación": "Juan Carlos Flores Miramontes", "Secretaría de Desarrollo Económico": "Cindy Blanco", "Secretaría del Trabajo": "Ricardo Barbosa", "Secretaría de Planeación": "Cinthya Cantero", "Gestión Integral del Agua": "Ernesto Marroquín", "Secretaría General de Gobierno": "Alberto Esquer", "Sistema de Asistencia": "Andrea Blanco", "COPARMEX": "Raúl Flores", "Secretaría de Salud": "Héctor Raúl Pérez", "Medio Ambiente": "Paola Bauche Petersen", "CMIC": "Roberto Escobedo", "CIAJ": "Ana Cristina Villalpando", "Desarrollo Energético": "Manuel Herrera Vega", "Consejo Consultivo": "Mtro. Rodrigo Navarro", "Agua y gestión hídrica": "Gemma Cithlalli López López (FCEE)", "Ciudades inteligentes": "Leticia Elizabeth Romero García (FCEE)", "Construcción sostenible": "Francisco Moreno Abril (ING)", "Eficiencia energética": "Francisco Moreno Abril (ING)", "Educación del carácter": "Daniela Salgado Gutiérrez (PED)", "Liderazgo-servicio": "Daniela Salgado Gutiérrez (PED)", "Evaluación y calidad": "Mónica Camargo Martínez (PED)", "Filosofía de la educación": "Daniela Salgado Gutiérrez (PED)", "armonización trabajo": "Daniela Salgado Gutiérrez (PED)", "Paternidad y maternidad": "Rafael Hurtado Domínguez (HUM)", "Derechos humanos": "Gabriela García Escobar (DER)", "Derecho internacional": "Gabriela García Escobar (DER)", "Pueblos indígenas": "Gabriela García Escobar (DER)", "Inteligencia artificial": "Guillermo Sosa Gómez (FCEE)", "Ciencia de datos": "Guillermo Sosa Gómez (FCEE)", "Ciberseguridad": "Carolina Del Valle Soto (ING)", "Robótica": "Alberto Rosa Sierra (ING)", "IoT y sistemas": "Juan Carlos López Pimentel (ING)", "Nanotecnología": "Friné Velázquez Contreras (ESDAI)", "Inocuidad": "Friné Velázquez Contreras (ESDAI)", "Biotecnología y escalamiento": "Gemma Cithlalli López López (FCEE)", "Salud mental": "Claudia Vega Michel (PED)", "Psicología positiva": "Jacobo Brofman Epelbaum (PED)", "Comunicación corporativa": "José Rafael Santana Villegas (COM)", "Periodismo y medios": "Elba Díaz Cerveró (COM)", "Ética profesional": "Margarita Cantero Ramírez (HUM)", "Compliance": "Yurixhi Gallardo Martínez (HUM)", "Políticas públicas y gobernanza": "Hugo Briseño Ramírez (FCEE)", "Desarrollo regional": "Edgar Demetrio Tovar García (FCEE)", "Emprendimiento": "Edgar Demetrio Tovar García (FCEE)", "Logística": "Elías Olivares Benítez (ING)", "Realidad virtual": "Arturo Jafet Rodríguez Muñoz (ING)", "Videojuegos": "Arturo Jafet Rodríguez Muñoz (ING)", "sísmica": "Héctor Gabriel Dávalos Alejo (ING)", "Diseño arquitectónico": "Rubén Romo Gamboa (ING)", "Electrónica de potencia": "Antonio Valderrábano González (ING)", "materiales y polímeros": "Alejandro E. Rodríguez-Sánchez (ING)", "Holografía": "José Alberto Del Puerto Flores (ING)", "Comunicaciones inalámbricas": "Carolina Del Valle Soto (ING)", "Identidad cultural": "Alejandro Blas Roldán Castellanos (HUM)", "Teología": "Luz Imelda Acedo Moreno (HUM)", "Economía de la educación": "Edgar Demetrio Tovar García (FCEE)" };
-/** Texto de contacto opcional guardado en micro-nodos personalizados (cNietos) */
-function findNietoContactString(nodeName, cNietos) {
-  if (!nodeName || !cNietos) return "";
-  for (const arr of Object.values(cNietos)) {
-    const hit = (arr || []).find((x) => x && x.name === nodeName);
-    if (hit && String(hit.contact || "").trim()) return String(hit.contact).trim();
-  }
-  return "";
+/** ItemPop: combina contactos RTDB (`parentKey` = nodo) + filas locales solo mientras falla el alta. */
+function mergeItemPopContacts(nodeName, contactsMap, fbList) {
+  const pk = String(nodeName || "").trim();
+  if (!pk) return [];
+  const fromFb = (fbList || [])
+    .filter((r) => String(r.parentKey || "") === pk)
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+    .map((r) => ({
+      fbId: r.id,
+      name: String(r.nombre || ""),
+      cargo: String(r.cargo || ""),
+      email: String(r.email || ""),
+    }));
+  const pending = Array.isArray(contactsMap[pk])
+    ? contactsMap[pk].filter((x) => !x.fbId)
+    : [];
+  const sig = (r) => `${String(r.name || "")}\0${String(r.email || "")}\0${String(r.cargo || "")}`;
+  const seen = new Set(fromFb.map(sig));
+  const extra = pending.filter((p) => !seen.has(sig(p)));
+  return [...fromFb, ...extra];
 }
+
 function gc(n) {
   if (!n) return null;
   const list = fbContactosRef.current;
@@ -156,15 +171,10 @@ function gc(n) {
     .filter((r) => r.parentKey && r.parentKey === n)
     .sort((a, b) => String(a.id).localeCompare(String(b.id)));
   if (linked.length) {
-    return linked
-      .map((r) => {
-        const nm = String(r.nombre || "").trim();
-        const cg = String(r.cargo || "").trim();
-        if (!nm) return "";
-        return cg ? `${nm} (${cg})` : nm;
-      })
-      .filter(Boolean)
-      .join("; ");
+    const first = linked[0];
+    const nm = String(first.nombre || "").trim();
+    const cg = String(first.cargo || "").trim();
+    if (nm) return cg ? `${nm} (${cg})` : nm;
   }
   const patronOnly = list
     .filter((r) => !r.parentKey && r.patron)
@@ -1176,48 +1186,102 @@ export default function Dashboard() {
     setContacts(nx);
     try { await window.storage.set('map-contacts-v1', JSON.stringify(nx)); } catch (e) { }
   }, []);
-  const syncItemPopContactsToRtdb = useCallback((nodeName, nextList) => {
-    (async () => {
+  const addContact = useCallback(async (key, c) => {
+    const name = String(c.name || "").trim();
+    if (!name) return;
+    const row = {
+      name,
+      cargo: String(c.cargo || "").trim(),
+      email: String(c.email || "").trim(),
+    };
+    try {
+      await appendContactoForParent(key, row);
+    } catch (e) {
+      console.error("RTDB append contacto:", e);
+      const pending = Array.isArray(contacts[key]) ? [...contacts[key]] : [];
+      await saveContacts({ ...contacts, [key]: [...pending, row] });
+    }
+  }, [contacts, saveContacts]);
+  const editContact = useCallback(async (key, idx, c) => {
+    const merged = mergeItemPopContacts(key, contacts, fbContactos);
+    const target = merged[idx];
+    if (!target) return;
+    const nextRow = {
+      name: String(c.name || "").trim(),
+      cargo: String(c.cargo || "").trim(),
+      email: String(c.email || "").trim(),
+    };
+    if (!nextRow.name) return;
+    if (target.fbId) {
       try {
-        if (!nodeName) return;
-        const rows = (nextList || []).map((c) => ({
-          name: c.name,
-          cargo: c.cargo,
-          email: c.email,
-        }));
-        const nit = findNietoContactString(nodeName, cNietos);
-        if (nit && !rows.some((r) => String(r.name || "").trim() === nit)) {
-          rows.unshift({ name: nit, cargo: "", email: "" });
+        await updateContacto(String(target.fbId), {
+          nombre: nextRow.name,
+          cargo: nextRow.cargo,
+          email: nextRow.email,
+          updatedAt: Date.now(),
+        });
+      } catch (e) {
+        console.error("RTDB update contacto:", e);
+      }
+    } else {
+      try {
+        await appendContactoForParent(key, nextRow);
+        const list = Array.isArray(contacts[key]) ? [...contacts[key]] : [];
+        const j = list.findIndex(
+          (x) => !x.fbId
+            && x.name === target.name
+            && (x.email || "") === (target.email || "")
+            && (x.cargo || "") === (target.cargo || "")
+        );
+        if (j >= 0) {
+          list.splice(j, 1);
+          await saveContacts({ ...contacts, [key]: list });
         }
-        if (!rows.length) await removeContactosLinkedToNode(nodeName);
-        else await replaceContactosForParent(nodeName, rows);
-      } catch (e) { console.error("RTDB ItemPop contactos:", e); }
-    })();
-  }, [cNietos]);
-  const addContact = useCallback((key, c) => {
-    const ex = Array.isArray(contacts[key]) ? [...contacts[key]] : [];
-    ex.push(c);
-    const nx = { ...contacts, [key]: ex };
-    saveContacts(nx);
-    syncItemPopContactsToRtdb(key, ex);
-  }, [contacts, saveContacts, syncItemPopContactsToRtdb]);
-  const editContact = useCallback((key, idx, c) => {
-    const ex = Array.isArray(contacts[key]) ? [...contacts[key]] : [];
-    if (ex[idx]) ex[idx] = c;
-    const nx = { ...contacts, [key]: ex };
-    saveContacts(nx);
-    syncItemPopContactsToRtdb(key, ex);
-  }, [contacts, saveContacts, syncItemPopContactsToRtdb]);
-  const delContact = useCallback((key, idx) => {
-    const ex = Array.isArray(contacts[key]) ? [...contacts[key]] : [];
-    ex.splice(idx, 1);
-    const nx = { ...contacts, [key]: ex };
-    saveContacts(nx);
-    syncItemPopContactsToRtdb(key, ex);
-  }, [contacts, saveContacts, syncItemPopContactsToRtdb]);
+      } catch (e) {
+        console.error("RTDB append contacto (edit):", e);
+        const list = Array.isArray(contacts[key]) ? [...contacts[key]] : [];
+        const j = list.findIndex(
+          (x) => !x.fbId
+            && x.name === target.name
+            && (x.email || "") === (target.email || "")
+            && (x.cargo || "") === (target.cargo || "")
+        );
+        if (j >= 0) {
+          list[j] = nextRow;
+          await saveContacts({ ...contacts, [key]: list });
+        }
+      }
+    }
+  }, [contacts, fbContactos, saveContacts]);
+  const delContact = useCallback(async (key, idx) => {
+    const merged = mergeItemPopContacts(key, contacts, fbContactos);
+    const target = merged[idx];
+    if (!target) return;
+    if (target.fbId) {
+      try {
+        await deleteContacto(String(target.fbId));
+      } catch (e) {
+        console.error("RTDB delete contacto:", e);
+      }
+    } else {
+      const list = Array.isArray(contacts[key]) ? [...contacts[key]] : [];
+      const j = list.findIndex(
+        (x) => !x.fbId
+          && x.name === target.name
+          && (x.email || "") === (target.email || "")
+          && (x.cargo || "") === (target.cargo || "")
+      );
+      if (j >= 0) {
+        list.splice(j, 1);
+        await saveContacts({ ...contacts, [key]: list });
+      }
+    }
+  }, [contacts, fbContactos, saveContacts]);
   /* Check if node has any contact (built-in OR user-added) */
   const hasContact = useCallback((name) => {
+    if (!name) return false;
     if (gc(name) && !(hiddenCT || []).includes(name)) return true;
+    if (fbContactos.some((r) => r.parentKey === name)) return true;
     const uc = contacts[name];
     return Array.isArray(uc) && uc.length > 0;
   }, [contacts, hiddenCT, fbContactos]);
@@ -1923,7 +1987,7 @@ export default function Dashboard() {
         </div>);
       })()}
 
-      {sItem && sItem.name && <ItemPop item={sItem} onClose={() => setSItem(null)} noteText={nt} setNoteText={setNt} onSave={() => saveN(sItem.name, nt, sItem?._parentKey || "")} noteHistory={Array.isArray(notes[sItem.name]) ? notes[sItem.name] : []} onDelete={(idx) => delNote(sItem.name, idx, sItem?._parentKey || "")} onEdit={(idx, txt) => editNote(sItem.name, idx, txt, sItem?._parentKey || "")} userContacts={Array.isArray(contacts[sItem?.name]) ? contacts[sItem.name] : []} onAddContact={c => addContact(sItem.name, c)} onEditContact={(idx, c) => editContact(sItem.name, idx, c)} onDelContact={idx => delContact(sItem.name, idx)}
+      {sItem && sItem.name && <ItemPop item={sItem} onClose={() => setSItem(null)} noteText={nt} setNoteText={setNt} onSave={() => saveN(sItem.name, nt, sItem?._parentKey || "")} noteHistory={Array.isArray(notes[sItem.name]) ? notes[sItem.name] : []} onDelete={(idx) => delNote(sItem.name, idx, sItem?._parentKey || "")} onEdit={(idx, txt) => editNote(sItem.name, idx, txt, sItem?._parentKey || "")} userContacts={mergeItemPopContacts(sItem?.name, contacts, fbContactos)} onAddContact={c => addContact(sItem.name, c)} onEditContact={(idx, c) => editContact(sItem.name, idx, c)} onDelContact={idx => delContact(sItem.name, idx)}
         itemTags={getTagsForItem(sItem?.name || '')}
         onAddTag={addFirebaseTag}
         onRmTag={rmFirebaseTag}

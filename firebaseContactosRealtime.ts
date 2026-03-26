@@ -67,6 +67,7 @@ export type UserContactRow = {
   name?: string;
   cargo?: string;
   email?: string;
+  notas?: string;
 };
 
 /**
@@ -135,6 +136,25 @@ export async function appendContactoForNieto(
     email: "",
     notas: "",
     source: "nieto",
+    updatedAt: Date.now(),
+  });
+}
+
+/** Agrega un contacto en ItemPop sin borrar los demás del mismo nodo (`parentKey` = nombre del micro-nodo). */
+export async function appendContactoForParent(
+  parentKey: string,
+  row: UserContactRow
+): Promise<ContactoId> {
+  const pk = parentKey.trim();
+  const nombre = String(row.name || "").trim();
+  if (!pk || !nombre) throw new Error("parentKey y nombre son obligatorios");
+  return createContacto({
+    parentKey: pk,
+    nombre,
+    cargo: String(row.cargo || "").trim(),
+    email: String(row.email || "").trim(),
+    notas: String(row.notas || "").trim(),
+    source: "itempop",
     updatedAt: Date.now(),
   });
 }
