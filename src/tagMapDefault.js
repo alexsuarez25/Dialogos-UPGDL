@@ -9,7 +9,7 @@ export const TAGS = [
   "Formación del Carácter", "Liderazgo Educativo", "Políticas Públicas", "Desarrollo Sostenible",
   "Ciudadanía", "Bienestar Social", "Gobernanza", "Responsabilidad Social", "Agroindustria",
   "Tecnologías para la Industria Alimentaria", "Biotecnología", "Desarrollo Social",
-  "Jóvenes y Vida Espiritual", "Jóvenes y Trabajo", "Jóvenes y Matrimonio y Familia", "Relaciones Interpersonales", "PRUEBA",
+  "Jóvenes y Vida Espiritual", "Jóvenes y Trabajo", "Jóvenes y Matrimonio y Familia", "Relaciones Interpersonales",
 ];
 
 export const TAG_MAP_DEFAULT = {
